@@ -36,5 +36,5 @@
    3. Perbarui nilai serverUrl di bawah, lalu commit
    ========================================================= */
 window.APP_CONFIG = {
-  serverUrl: 'https://GANTI-DENGAN-URL-EXEC-ANDA/exec',
+  serverUrl: 'https://script.google.com/macros/s/AKfycbyrmNr7MZJRb4A_rGk3gyHjxnHp8sU2b0oTQULS9Y5NjTY68_0e6SlLiBFSsJaYaaD4IA/exec',
 };
