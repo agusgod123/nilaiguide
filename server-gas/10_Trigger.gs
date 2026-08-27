@@ -126,6 +126,9 @@ function onOpen() {
     .addSeparator()
     .addItem('Nyalakan Pembaruan Otomatis', 'pasangTriggerHarian')
     .addItem('Periksa Kesehatan Data', 'menuPeriksa')
+    .addSeparator()
+    .addItem('Susun Laporan Bulan Ini', 'menuLaporanSekarang')
+    .addItem('Susun Laporan Bulan Lalu', 'menuLaporanBulanLalu')
     .addToUi();
 }
 
