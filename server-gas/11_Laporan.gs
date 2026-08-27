@@ -82,6 +82,16 @@ const LAP_URUT_TOTAL = 'rata';
 /** Urutan daftar per regu: 'nama' (mudah dicari) atau 'total' (peringkat). */
 const LAP_URUT_DAFTAR = 'nama';
 
+/**
+ * Ikut menampilkan guide yang sebulan itu tidak pernah dinilai (hari = 0).
+ *
+ * peringkatGuide_() sengaja melewati mereka — untuk peringkat memang tidak
+ * ada gunanya. Untuk laporan arsip biasanya justru perlu, supaya terlihat
+ * siapa yang tidak pernah muncul. Kolom persen pada baris itu ditulis "—",
+ * bukan 0%, supaya tidak terbaca sebagai "melanggar".
+ */
+const LAP_TAMPILKAN_NOL = true;
+
 /** Warna. Sama dengan keputusan grafik di tab Dasbor (jebakan warna merek). */
 const LAP_WARNA = {
   judul   : '#0B5D3B',   // hijau merek — aman untuk teks, tidak untuk garis grafik
@@ -111,8 +121,10 @@ const LAP_KOL_DASBOR = {
 /**
  * Nama medan yang dicari pada hasil peringkatGuide_().
  *
- * Kalau tanda tangan atau nama medannya di proyekmu berbeda, cukup tambahkan
- * namanya ke daftar yang sesuai — TIDAK perlu menyentuh bagian lain berkas ini.
+ * Sudah dicocokkan dengan 08_Peringkat.gs: nama, regu, hari, uniform, idCard,
+ * etika, review, total. Daftar alias di bawah hanya jaring pengaman kalau
+ * salah satunya kelak berganti nama — cukup tambahkan namanya di sini,
+ * TIDAK perlu menyentuh bagian lain berkas ini.
  * Jalankan ujiLaporan() untuk melihat medan mana yang akhirnya terpakai.
  *
  * Catatan: 'id' sengaja TIDAK dimasukkan ke daftar idcard, supaya tidak
@@ -248,27 +260,43 @@ function lapMedanTeks_(obj, kandidat) {
 /**
  * Mengambil rekap per guide untuk satu bulan.
  *
- * Sumbernya peringkatGuide_() dari 08_Peringkat.gs. Nama medannya
- * dinormalkan lewat LAP_PETA, jadi laporan tidak ikut pecah kalau
- * medan di sana berganti nama.
+ * peringkatGuide_() BUKAN pembaca data — ia penghitung murni dengan tanda
+ * tangan (ringkasan, guides, reviewPeta). Ketiga bahannya disiapkan persis
+ * seperti yang dilakukan bangunDasbor_ di 09_Dasbor.gs, supaya angka laporan
+ * dijamin sama dengan angka dasbor.
+ *
+ * peringkatGuide_() melewati guide yang sebulan itu tidak punya data sama
+ * sekali. Untuk laporan, daftar lengkap dari bacaGuides_() dipakai sebagai
+ * kerangka, lalu angkanya ditempelkan — jadi guide yang tidak pernah muncul
+ * tetap terdaftar dengan hari = 0 (lihat LAP_TAMPILKAN_NOL).
  *
  * Mengembalikan larik objek berbentuk:
- *   { nama, regu:['A1'], hari, uniform, idcard, etika, review, total }
+ *   { guideId, nama, regu:['A1'], kategori, hari, uniform, idcard, etika,
+ *     review, hariReview, total, rataTotal, taat, rataEtika }
  */
 function lapAmbilGuide_(bulan) {
-  if (typeof peringkatGuide_ !== 'function') {
-    throw new Error('Fungsi peringkatGuide_() tidak ditemukan. ' +
-      'Pastikan 08_Peringkat.gs ikut tertempel, atau ganti pemanggilan di lapAmbilGuide_().');
+  const hilang = [];
+  if (typeof bacaGuides_             !== 'function') hilang.push('bacaGuides_');
+  if (typeof rangkumBulan_           !== 'function') hilang.push('rangkumBulan_');
+  if (typeof kumpulkanReviewManual_  !== 'function') hilang.push('kumpulkanReviewManual_');
+  if (typeof peringkatGuide_         !== 'function') hilang.push('peringkatGuide_');
+  if (hilang.length) {
+    throw new Error('Fungsi berikut tidak ditemukan: ' + hilang.join(', ') +
+      '. Pastikan 05_Ringkasan.gs dan 08_Peringkat.gs ikut tertempel.');
   }
 
-  const mentah = peringkatGuide_(bulan);
+  const guides     = bacaGuides_();
+  const ringkasan  = rangkumBulan_(bulan);
+  const reviewPeta = kumpulkanReviewManual_(bulan);
+  const mentah     = peringkatGuide_(ringkasan, guides, reviewPeta);
+
   if (!Array.isArray(mentah)) {
-    throw new Error('peringkatGuide_("' + bulan + '") tidak mengembalikan larik. ' +
-      'Periksa tanda tangannya, lalu sesuaikan lapAmbilGuide_(). Jalankan ujiLaporan() untuk melihat bentuknya.');
+    throw new Error('peringkatGuide_() tidak mengembalikan larik. ' +
+      'Jalankan ujiLaporan() untuk melihat bentuknya.');
   }
-  if (!mentah.length) return [];
 
-  return mentah.map(function (g) {
+  /* --- angka per guide, nama medan dinormalkan lewat LAP_PETA --- */
+  function rapikan(g) {
     const nama    = lapMedanTeks_(g, LAP_PETA.nama);
     const regu    = lapMedanTeks_(g, LAP_PETA.regu);
     const hari    = lapMedanAngka_(g, LAP_PETA.hari);
@@ -278,25 +306,57 @@ function lapAmbilGuide_(bulan) {
     const review  = lapMedanAngka_(g, LAP_PETA.review);
     const total   = lapMedanAngka_(g, LAP_PETA.total);
 
+    const nH = hari ? hari.nilai : 0;
     const nU = uniform ? uniform.nilai : 0;
     const nI = idcard  ? idcard.nilai  : 0;
     const nE = etika   ? etika.nilai   : 0;
     const nR = review  ? review.nilai  : 0;
+    // Nilai total = Uniform + ID + Etika + Review (aturan bisnis §2).
+    const nT = total ? total.nilai : (nU + nI + nE + nR);
 
     return {
-      nama   : nama ? String(nama.nilai) : '(tanpa nama)',
-      regu   : regu ? lapReguList_(regu.nilai) : [],
-      hari   : hari ? hari.nilai : 0,
-      uniform: nU,
-      idcard : nI,
-      etika  : nE,
-      review : nR,
-      // Nilai total = Uniform + ID + Etika + Review (aturan bisnis §2).
-      // Kalau modul peringkat sudah menghitungnya, angkanya yang dipakai.
-      total  : total ? total.nilai : (nU + nI + nE + nR)
+      guideId  : g.guideId || '',
+      nama     : nama ? String(nama.nilai) : '(tanpa nama)',
+      regu     : regu ? lapReguList_(regu.nilai) : [],
+      kategori : g.kategori || '',
+      hari     : nH,
+      uniform  : nU,
+      idcard   : nI,
+      etika    : nE,
+      review   : nR,
+      hariReview: lapNum_(g.hariReview),
+      total    : nT,
+      // Rata-rata & ketaatan diambil apa adanya dari 08_Peringkat.gs bila ada,
+      // supaya laporan tidak pernah berselisih dengan dasbor.
+      rataTotal: (typeof g.rataTotal === 'number') ? g.rataTotal : lapBagi_(nT, nH),
+      taat     : (typeof g.taat === 'number') ? g.taat : lapBagi_(nU + nI, 2 * nH),
+      rataEtika: (typeof g.rataEtika === 'number') ? g.rataEtika : lapBagi_(nE, nH)
+    };
+  }
+
+  const peta = {};
+  mentah.forEach(function (g) {
+    const r = rapikan(g);
+    peta[r.guideId || r.nama] = r;
+  });
+
+  if (!LAP_TAMPILKAN_NOL) return Object.keys(peta).map(function (k) { return peta[k]; });
+
+  /* --- kerangka daftar lengkap, angka ditempelkan --- */
+  return (guides || []).map(function (g) {
+    const kunci = g.guideId || g.guideName;
+    if (peta[kunci]) return peta[kunci];
+    return {
+      guideId: g.guideId || '',
+      nama   : String(g.guideName || '(tanpa nama)'),
+      regu   : lapReguList_(g.regu),
+      kategori: g.kategori || '',
+      hari: 0, uniform: 0, idcard: 0, etika: 0, review: 0, hariReview: 0,
+      total: 0, rataTotal: 0, taat: 0, rataEtika: 0
     };
   });
 }
+
 
 /**
  * Membaca ringkasan harian dari tab Dasbor bulan itu.
@@ -389,8 +449,10 @@ function lapSaringKategori_(guide, kategori) {
 function lapPeringkat_(guide, opsi) {
   const minHari = opsi.abaikanMinHari ? 0 : lapMinHari_();
   const layak = guide.filter(function (g) {
-    if (!(g.hari >= minHari && g.hari > 0)) return false;
-    return opsi.saring ? opsi.saring(g) : true;
+    if (!opsi.abaikanMinHari && g.hari < minHari) return false;
+    // Guide yang sebulan itu HANYA punya review manual (hari = 0) tetap sah
+    // untuk peringkat review — angkanya sudah diketik tim, lihat 08_Peringkat.gs.
+    return opsi.saring ? opsi.saring(g) : g.hari > 0;
   });
 
   const berskor = layak.map(function (g) {
@@ -414,13 +476,15 @@ function lapPeringkat_(guide, opsi) {
 /** Ketujuh tabel peringkat, sesuai tab Dasbor. */
 function lapSemuaPeringkat_(guide) {
   const pakaiJumlah = (LAP_URUT_TOTAL === 'jumlah');
+  // Rata-rata diambil apa adanya dari 08_Peringkat.gs — bukan dihitung ulang,
+  // supaya urutan di laporan tidak pernah berbeda dari urutan di tab Dasbor.
   const total  = { jumlah: function (g) { return g.total; },
-                   rata  : function (g) { return lapBagi_(g.total, g.hari); },
+                   rata  : function (g) { return g.rataTotal; },
                    pakaiJumlah: pakaiJumlah };
   const taat   = { jumlah: function (g) { return g.uniform + g.idcard; },
-                   rata  : function (g) { return lapBagi_(g.uniform + g.idcard, 2 * g.hari); } };
+                   rata  : function (g) { return g.taat; } };
   const etika  = { jumlah: function (g) { return g.etika; },
-                   rata  : function (g) { return lapBagi_(g.etika, g.hari); } };
+                   rata  : function (g) { return g.rataEtika; } };
   const review = { jumlah: function (g) { return g.review; },
                    rata  : function (g) { return lapBagi_(g.review, g.hari); },
                    pakaiJumlah: true, abaikanMinHari: true,
@@ -734,7 +798,7 @@ function lapTulisDaftarRegu_(sh, r, guide, regu, huruf) {
 
   const data = daftar.map(function (g) {
     return [g.nama, g.regu.join('/'), g.hari, g.uniform, g.idcard,
-            lapBagi_(g.uniform + g.idcard, 2 * g.hari), g.etika, g.review, g.total];
+            (g.hari > 0 ? g.taat : '—'), g.etika, g.review, g.total];
   });
   const r0 = r;
   r = lapIsiTabel_(sh, r, data, { 3: '0', 4: '0', 5: '0', 6: '0.0%', 7: '0', 8: '0', 9: '0' });
@@ -978,15 +1042,22 @@ function ujiLaporan() {
   catat.push('Batas hari peringkat   : ' + lapMinHari_());
   catat.push('Urutan tabel total     : ' + LAP_URUT_TOTAL);
 
-  if (typeof peringkatGuide_ !== 'function') {
-    catat.push('❌ peringkatGuide_() TIDAK ditemukan — 08_Peringkat.gs belum tertempel?');
+  const perlu = ['bacaGuides_', 'rangkumBulan_', 'kumpulkanReviewManual_', 'peringkatGuide_'];
+  const ada = [typeof bacaGuides_, typeof rangkumBulan_,
+               typeof kumpulkanReviewManual_, typeof peringkatGuide_];
+  const hilang = perlu.filter(function (n, i) { return ada[i] !== 'function'; });
+  if (hilang.length) {
+    catat.push('❌ Fungsi tidak ditemukan   : ' + hilang.join(', '));
     Logger.log(catat.join('\n'));
     return catat.join('\n');
   }
 
-  const mentah = peringkatGuide_(bulan);
+  const guides = bacaGuides_();
+  catat.push('bacaGuides_            : ' + guides.length + ' guide terdaftar');
+
+  const mentah = peringkatGuide_(rangkumBulan_(bulan), guides, kumpulkanReviewManual_(bulan));
   catat.push('peringkatGuide_        : ' + (Array.isArray(mentah)
-    ? mentah.length + ' baris' : 'BUKAN larik (' + typeof mentah + ') ❌'));
+    ? mentah.length + ' guide punya data bulan ini' : 'BUKAN larik (' + typeof mentah + ') ❌'));
 
   if (Array.isArray(mentah) && mentah.length) {
     catat.push('Medan tersedia         : ' + Object.keys(mentah[0]).join(', '));
