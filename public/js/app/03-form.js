@@ -1,0 +1,227 @@
+/* =========================================================
+   Formulir penilaian
+   Berkas 4 dari 8 — lapisan UI Penilaian Guide Besakih
+
+   TUGAS    : Isi formulir, draf otomatis, tombol kriteria, kirim penilaian.
+   LARANGAN : Tidak menulis IndexedDB langsung — selalu lewat DB.*.
+
+   Seluruh berkas di js/app/ berbagi satu objek window.App dan dimuat
+   berurutan oleh index.html. State yang berubah hanya hidup di App.state;
+   fungsi lintas berkas dipanggil lewat App.nama().
+   ========================================================= */
+(function () {
+  'use strict';
+
+  const App = window.App;
+  const { $, $$, uuid, fmtTime, esc, ETIKA_MIN, ETIKA_MAKS, KRIT_ANGKA } = App;
+
+  App.resetForm = function resetForm(keepPos = true) {
+    const pos = keepPos ? App.state.form.pos : 1;
+    App.state.form = { pos, guide: null, crit: { idCard: null, uniform: null, etika: 0 }, catatan: '' };
+    $('#posSelect').value = String(pos);
+    $('#guideInput').value = '';
+    $('#catatan').value = '';
+    $('#guidePicked').classList.add('hidden');
+    App.tampilkanKandidat(null);
+    $$('.seg').forEach(b => b.classList.remove('on'));
+    $$('.criterion').forEach(c => {
+      if (!KRIT_ANGKA[c.dataset.crit]) c.classList.add('unset');
+    });
+    App.applyCritUI();
+    App.saveDraft();
+  }
+
+  // Draft ikut dienkripsi (lihat DB.simpanDraft). Isinya sama dengan isi
+  // penilaian — nama guide dan nilainya — jadi tidak masuk akal kalau
+  // penilaiannya dikunci sementara draftnya tergeletak polos.
+  App.saveDraft = function saveDraft() {
+    DB.simpanDraft(App.state.form);
+  }
+
+  App.loadDraft = async function loadDraft() {
+    try {
+      const d = await DB.bacaDraft();
+      if (!d) return;
+      App.state.form = { ...form, ...d, crit: { ...form.crit, ...(d.crit || {}) } };
+      $('#posSelect').value = String(App.state.form.pos || 1);
+      $('#guideInput').value = App.state.form.guide ? App.state.form.guide.guideName : '';
+      $('#catatan').value = App.state.form.catatan || '';
+      App.applyCritUI();
+      if (App.state.form.guide) App.showPicked(App.state.form.guide);
+      if (App.state.form.guide || Object.values(App.state.form.crit).some(v => v !== null)) $('#draftNote').hidden = false;
+    } catch {}
+  }
+
+  /** Tampilkan nilai etika dengan tanda: -3, 0, +2. */
+  App.nilaiEtika = function nilaiEtika(v) {
+    const n = Math.min(ETIKA_MAKS, Math.max(ETIKA_MIN, Number(v) || 0));
+    return n > 0 ? '+' + n : String(n);
+  }
+
+  App.applyCritUI = function applyCritUI() {
+    $$('.criterion').forEach(c => {
+      const k = c.dataset.crit;
+      const v = App.state.form.crit[k];
+      if (KRIT_ANGKA[k]) {
+        const n = Math.min(ETIKA_MAKS, Math.max(ETIKA_MIN, Number(v) || 0));
+        const el = $(KRIT_ANGKA[k]);
+        // Nilai positif diberi tanda + agar bedanya dengan minus terbaca jelas
+        if (el) el.textContent = n > 0 ? '+' + n : String(n);
+        c.classList.remove('unset');            // 0 sudah merupakan jawaban sah
+        const kurang = c.querySelector('[data-step="-1"]');
+        const tambah = c.querySelector('[data-step="1"]');
+        if (kurang) kurang.toggleAttribute('disabled', n <= ETIKA_MIN);
+        if (tambah) tambah.toggleAttribute('disabled', n >= ETIKA_MAKS);
+        return;
+      }
+      c.classList.toggle('unset', v === null);
+      c.querySelectorAll('.seg').forEach(b => b.classList.toggle('on', v !== null && String(+b.dataset.val) === String(+v)));
+    });
+  }
+
+  App.showPicked = function showPicked(g) {
+    const el = $('#guidePicked');
+    el.dataset.guideId = g.guideId;
+    el.innerHTML = `✓ ${esc(g.guideName)} · ${esc(g.guideId)} · ${esc(App.labelRegu(g.regu))}`;
+    el.classList.remove('hidden');
+    App.tandaiKembar(g);
+  }
+
+  /**
+   * Beri tahu sedini mungkin bila guide ini sudah dinilai di pos yang sama
+   * hari ini — supaya staff tidak terlanjur mengisi formulir untuk kehadiran
+   * yang toh tetap dihitung satu.
+   */
+  App.tandaiKembar = async function tandaiKembar(g) {
+    const el = $('#guidePicked');
+    const pos = Number($('#posSelect').value);
+    let kembar = null;
+    try { kembar = await DB.penilaianKembar(g.guideId, pos, DB.sekarangISO()); }
+    catch { return; }
+    // Guide sudah diganti selagi menunggu — jangan timpa keterangannya
+    if (!kembar || el.dataset.guideId !== g.guideId) return;
+    el.innerHTML += `<br><small>🚫 Sudah dinilai di Pos ${pos} hari ini — ` +
+                    `tidak bisa dinilai lagi di pos ini. Pos lain masih bisa.</small>`;
+  }
+
+  /** Tawarkan nama-nama yang mungkin dimaksud saat ketikan masih ambigu. */
+  App.tampilkanKandidat = function tampilkanKandidat(kandidat) {
+    const el = $('#guideAmbigu');
+    if (!el) return;
+    if (!kandidat || !kandidat.length) { el.hidden = true; el.textContent = ''; return; }
+    const tampil = kandidat.slice(0, 6);
+    el.innerHTML = 'Maksud Anda: ' + tampil.map(g =>
+      `<button type="button" class="chip" data-guide="${esc(g.guideName)}">${esc(g.guideName)}</button>`
+    ).join(' ') + (kandidat.length > tampil.length
+      ? ` <small>(+${kandidat.length - tampil.length} lainnya — ketik lebih lengkap)</small>` : '');
+    el.hidden = false;
+  }
+
+  App.submitEval = async function submitEval(e) {
+    e.preventDefault();
+    const pilihan = App.guideUntukSimpan($('#guideInput').value);
+    if (!pilihan.guide) {
+      App.toast(pilihan.error, 'warn', '⚠️');
+      App.tampilkanKandidat(pilihan.kandidat);
+      $('#guideInput').focus();
+      return;
+    }
+    const g = pilihan.guide;
+    // Etika boleh 0; yang wajib dipilih hanya Uniform dan ID-Card
+    const missing = ['idCard', 'uniform'].filter(k => App.state.form.crit[k] === null);
+    if (missing.length) { App.toast('Pilih Ya/Tidak untuk ID-Card dan Uniform', 'warn', '⚠️'); return; }
+
+    // Dalam mode koreksi, pos-nya dikunci ke penilaian yang sedang dibetulkan.
+    const pos = App.state.koreksi ? Number(App.state.koreksi.pos) : Number($('#posSelect').value);
+
+    // Satu pos hanya menilai satu kali per hari. Server menolak kiriman kedua,
+    // jadi menahannya di sini bukan sekadar peringatan — melainkan mencegah
+    // staff mengisi formulir yang sudah pasti ditolak nanti.
+    // Pos LAIN tetap boleh menilai guide yang sama pada hari yang sama.
+    // Saat sedang mengoreksi, penilaian "kembar" itu justru yang dibetulkan.
+    const kembar = App.state.koreksi ? null : await DB.penilaianKembar(g.guideId, pos, DB.sekarangISO());
+    if (kembar) {
+      const c = kembar.criteria || {};
+      App.toast(`${g.guideName} sudah dinilai di Pos ${pos} hari ini`, 'warn', '🚫');
+      const el = $('#guideAmbigu');
+      if (el) {
+        el.innerHTML =
+          `🚫 <strong>${esc(g.guideName)}</strong> sudah dinilai di Pos ${pos} ` +
+          `pukul ${esc(fmtTime(kembar.timestamp).split(' ').pop())} — ` +
+          `Uniform ${c.uniform ? 'Ya' : 'Tidak'}, ID ${c.idCard ? 'Ya' : 'Tidak'}, ` +
+          `Etika ${App.nilaiEtika(c.etika)}.<br>` +
+          `Satu pos menilai satu kali sehari. Guide ini masih bisa dinilai di pos lain.` +
+          `<br><button type="button" class="chip retrybtn" data-fix="${esc(kembar.evaluationId)}">` +
+          `✏️ Betulkan penilaian itu</button>`;
+        el.hidden = false;
+      }
+      return;
+    }
+
+    const evaluation = {
+      evaluationId: uuid(),
+      guideId: g.guideId,
+      guideName: g.guideName,
+      pos,
+      // Koreksi memakai cap waktu penilaian ASLINYA. Kunci "satu pos sekali
+      // sehari" di server memakai TANGGAL, jadi keduanya wajib jatuh pada hari
+      // yang sama — koreksi yang dibuat tepat lewat tengah malam akan ditolak
+      // kalau diberi cap waktu baru. Kapan koreksinya benar-benar masuk tetap
+      // tercatat server di kolom receivedAt.
+      timestamp: App.state.koreksi ? App.state.koreksi.timestamp : DB.sekarangISO(),
+      criteria: {
+        idCard: !!App.state.form.crit.idCard,
+        uniform: !!App.state.form.crit.uniform,
+        etika: Math.min(ETIKA_MAKS, Math.max(ETIKA_MIN, Number(App.state.form.crit.etika) || 0)),
+      },
+      catatan: $('#catatan').value.trim(),
+      synced: false,
+    };
+    // koreksiDari hanya disertakan bila penilaian lamanya SUDAH ada di server.
+    // Kalau belum pernah terkirim, tidak ada yang perlu ditandai di sana.
+    if (App.state.koreksi && App.state.koreksi.synced) evaluation.koreksiDari = App.state.koreksi.evaluationId;
+
+    const sedangKoreksi = !!App.state.koreksi;
+    // Keadaan penilaian lama dibaca ULANG di sini, bukan dipakai apa adanya
+    // dari saat tombol Perbaiki ditekan: sync bisa saja selesai sementara
+    // formulir sedang diisi, dan jalur "timpa di perangkat" hanya sah untuk
+    // entri yang benar-benar belum terkirim.
+    if (App.state.koreksi) {
+      const kini = (await DB.all()).find(e => e.evaluationId === App.state.koreksi.evaluationId);
+      if (kini) {
+        App.state.koreksi = kini;
+        if (kini.synced) evaluation.koreksiDari = kini.evaluationId;
+        else delete evaluation.koreksiDari;
+      }
+    }
+
+    try {
+      if (App.state.koreksi && !App.state.koreksi.synced) {
+        // Belum pernah sampai ke server → cukup ditimpa di perangkat. Tidak
+        // perlu jejak koreksi di spreadsheet: angka yang salah belum pernah
+        // ada di sana.
+        await DB.gantiIsi(App.state.koreksi.evaluationId,
+                          { ...evaluation, evaluationId: App.state.koreksi.evaluationId, koreksiDari: null });
+      } else {
+        await DB.save(evaluation);
+        if (App.state.koreksi) await DB.tandaiDiganti(App.state.koreksi.evaluationId, evaluation.evaluationId);
+      }
+    } catch (err) {
+      App.toast('Gagal menyimpan: ' + err.message, 'err', '❌');
+      return;
+    }
+
+    App.state.koreksi = null;
+    App.tampilkanBarKoreksi();
+    App.haptic([30, 40, 30]);
+    App.toast(sedangKoreksi ? 'Penilaian dibetulkan' : 'Penilaian tersimpan', 'ok',
+          sedangKoreksi ? '✏️' : '💾');
+    App.state.form.pos = evaluation.pos;
+    DB.hapusDraft();
+    $('#draftNote').hidden = true;
+    App.resetForm(true);
+    App.refreshStats();
+    App.go('home');
+    if (Sync.isOnline()) Sync.syncNow();
+  }
+})();

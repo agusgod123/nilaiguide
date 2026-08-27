@@ -1,0 +1,95 @@
+/* =========================================================
+   sw.js — Service Worker (PRD AC-8, §5 ketersediaan 100% offline)
+   Strategi: cache-first untuk app shell, network-only untuk /api/*
+   ========================================================= */
+// Dinaikkan bersama APP_VERSION di js/app/00-inti.js. Layar Tentang menampilkan
+// keduanya, jadi laporan staff ("versi berapa yang tertulis?") bisa dipakai
+// memastikan HP mana yang sudah menerima pembaruan.
+const CACHE = 'besakih-guide-v1.9.0';
+const SHELL = [
+  './',
+  './index.html',
+  './config.js',
+  './guides.json',
+  './css/styles.css',
+  './js/db.js',
+  './js/sync.js',
+  './js/app/00-inti.js',
+  './js/app/01-navigasi.js',
+  './js/app/02-guide.js',
+  './js/app/03-form.js',
+  './js/app/04-riwayat.js',
+  './js/app/05-export.js',
+  './js/app/06-status.js',
+  './js/app/07-mulai.js',
+  './manifest.webmanifest',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+];
+
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE)
+      .then(c => c.addAll(SHELL))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+// Aplikasi menanyakan versi berkas yang benar-benar terpasang di perangkat
+// ini. Nomor di app.js hanya menunjukkan versi berkas yang sedang DIBACA;
+// yang menentukan apakah pembaruan sudah sampai adalah cache yang aktif.
+self.addEventListener('message', event => {
+  if (event.data === 'versi' && event.source) {
+    event.source.postMessage({ versiCache: CACHE });
+  }
+});
+
+self.addEventListener('fetch', event => {
+  const req = event.request;
+  if (req.method !== 'GET') return;
+
+  const url = new URL(req.url);
+
+  // Permintaan ke host lain (mis. Web App Google Apps Script) dilepas apa
+  // adanya ke jaringan. Sebelumnya permintaan ini ikut masuk jalur app shell,
+  // dan saat jaringan putus balasannya adalah index.html — aplikasi lalu
+  // mencoba membacanya sebagai JSON dan gagal dengan pesan yang membingungkan.
+  if (url.origin !== self.location.origin) return;
+
+  // API tidak pernah di-cache: harus selalu ke jaringan.
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(req).catch(() => new Response(
+      JSON.stringify({ error: 'offline' }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } }
+    )));
+    return;
+  }
+
+  // App shell: cache-first, perbarui di latar belakang.
+  event.respondWith(
+    caches.match(req).then(cached => {
+      const network = fetch(req).then(res => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy));
+        }
+        return res;
+      }).catch(() => {
+        if (cached) return cached;
+        // index.html hanya pantas sebagai pengganti untuk perpindahan halaman.
+        // Untuk berkas data (mis. guides.json) balasan HTML justru menyesatkan.
+        if (req.mode === 'navigate') return caches.match('./index.html');
+        return new Response('', { status: 504, statusText: 'offline' });
+      });
+      return cached || network;
+    })
+  );
+});

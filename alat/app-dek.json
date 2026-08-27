@@ -1,0 +1,337 @@
+[
+ {
+  "nama": "APP_VERSION",
+  "jenis": "state",
+  "baris": 11
+ },
+ {
+  "nama": "$",
+  "jenis": "state",
+  "baris": 12
+ },
+ {
+  "nama": "$$",
+  "jenis": "state",
+  "baris": 13
+ },
+ {
+  "nama": "TITLES",
+  "jenis": "state",
+  "baris": 15
+ },
+ {
+  "nama": "guides",
+  "jenis": "state",
+  "baris": 24
+ },
+ {
+  "nama": "current",
+  "jenis": "state",
+  "baris": 25
+ },
+ {
+  "nama": "form",
+  "jenis": "state",
+  "baris": 26
+ },
+ {
+  "nama": "historyFilter",
+  "jenis": "state",
+  "baris": 27
+ },
+ {
+  "nama": "koreksi",
+  "jenis": "state",
+  "baris": 35
+ },
+ {
+  "nama": "uuid",
+  "jenis": "state",
+  "baris": 38
+ },
+ {
+  "nama": "toast",
+  "jenis": "fn",
+  "baris": 43
+ },
+ {
+  "nama": "haptic",
+  "jenis": "fn",
+  "baris": 62
+ },
+ {
+  "nama": "fmtTime",
+  "jenis": "state",
+  "baris": 66
+ },
+ {
+  "nama": "download",
+  "jenis": "fn",
+  "baris": 72
+ },
+ {
+  "nama": "go",
+  "jenis": "fn",
+  "baris": 82
+ },
+ {
+  "nama": "openDrawer",
+  "jenis": "fn",
+  "baris": 101
+ },
+ {
+  "nama": "closeDrawer",
+  "jenis": "fn",
+  "baris": 106
+ },
+ {
+  "nama": "loadGuides",
+  "jenis": "fn",
+  "baris": 121
+ },
+ {
+  "nama": "labelRegu",
+  "jenis": "fn",
+  "baris": 160
+ },
+ {
+  "nama": "cocokFilter",
+  "jenis": "fn",
+  "baris": 168
+ },
+ {
+  "nama": "guidesTersaring",
+  "jenis": "fn",
+  "baris": 179
+ },
+ {
+  "nama": "fillGuideInputs",
+  "jenis": "fn",
+  "baris": 185
+ },
+ {
+  "nama": "esc",
+  "jenis": "state",
+  "baris": 198
+ },
+ {
+  "nama": "findGuide",
+  "jenis": "fn",
+  "baris": 206
+ },
+ {
+  "nama": "guideUntukSimpan",
+  "jenis": "fn",
+  "baris": 224
+ },
+ {
+  "nama": "guideKategoriFilter",
+  "jenis": "state",
+  "baris": 244
+ },
+ {
+  "nama": "renderGuideCards",
+  "jenis": "fn",
+  "baris": 246
+ },
+ {
+  "nama": "resetForm",
+  "jenis": "fn",
+  "baris": 276
+ },
+ {
+  "nama": "saveDraft",
+  "jenis": "fn",
+  "baris": 295
+ },
+ {
+  "nama": "loadDraft",
+  "jenis": "fn",
+  "baris": 298
+ },
+ {
+  "nama": "ETIKA_MIN",
+  "jenis": "state",
+  "baris": 313
+ },
+ {
+  "nama": "ETIKA_MAKS",
+  "jenis": "state",
+  "baris": 314
+ },
+ {
+  "nama": "KRIT_ANGKA",
+  "jenis": "state",
+  "baris": 316
+ },
+ {
+  "nama": "nilaiEtika",
+  "jenis": "fn",
+  "baris": 319
+ },
+ {
+  "nama": "applyCritUI",
+  "jenis": "fn",
+  "baris": 324
+ },
+ {
+  "nama": "showPicked",
+  "jenis": "fn",
+  "baris": 345
+ },
+ {
+  "nama": "tandaiKembar",
+  "jenis": "fn",
+  "baris": 358
+ },
+ {
+  "nama": "tampilkanKandidat",
+  "jenis": "fn",
+  "baris": 371
+ },
+ {
+  "nama": "submitEval",
+  "jenis": "fn",
+  "baris": 383
+ },
+ {
+  "nama": "cocokFilterRiwayat",
+  "jenis": "state",
+  "baris": 501
+ },
+ {
+  "nama": "renderHistory",
+  "jenis": "fn",
+  "baris": 508
+ },
+ {
+  "nama": "bolehDikoreksi",
+  "jenis": "state",
+  "baris": 582
+ },
+ {
+  "nama": "mulaiKoreksi",
+  "jenis": "fn",
+  "baris": 585
+ },
+ {
+  "nama": "tampilkanBarKoreksi",
+  "jenis": "fn",
+  "baris": 612
+ },
+ {
+  "nama": "batalKoreksi",
+  "jenis": "fn",
+  "baris": 635
+ },
+ {
+  "nama": "cobaKirimLagi",
+  "jenis": "fn",
+  "baris": 643
+ },
+ {
+  "nama": "SEP",
+  "jenis": "state",
+  "baris": 663
+ },
+ {
+  "nama": "sel",
+  "jenis": "state",
+  "baris": 664
+ },
+ {
+  "nama": "barisCsv",
+  "jenis": "state",
+  "baris": 668
+ },
+ {
+  "nama": "jamLokal",
+  "jenis": "state",
+  "baris": 670
+ },
+ {
+  "nama": "reguGuide",
+  "jenis": "state",
+  "baris": 677
+ },
+ {
+  "nama": "rangkumPerangkat",
+  "jenis": "fn",
+  "baris": 692
+ },
+ {
+  "nama": "exportCsv",
+  "jenis": "fn",
+  "baris": 754
+ },
+ {
+  "nama": "refreshStats",
+  "jenis": "fn",
+  "baris": 842
+ },
+ {
+  "nama": "tampilkanSelisihJam",
+  "jenis": "fn",
+  "baris": 874
+ },
+ {
+  "nama": "setNet",
+  "jenis": "fn",
+  "baris": 909
+ },
+ {
+  "nama": "refreshServerNotice",
+  "jenis": "fn",
+  "baris": 918
+ },
+ {
+  "nama": "refreshStorage",
+  "jenis": "fn",
+  "baris": 943
+ },
+ {
+  "nama": "TUT",
+  "jenis": "state",
+  "baris": 981
+ },
+ {
+  "nama": "tutIndex",
+  "jenis": "state",
+  "baris": 987
+ },
+ {
+  "nama": "showTutorial",
+  "jenis": "fn",
+  "baris": 989
+ },
+ {
+  "nama": "renderTut",
+  "jenis": "fn",
+  "baris": 993
+ },
+ {
+  "nama": "endTutorial",
+  "jenis": "fn",
+  "baris": 1001
+ },
+ {
+  "nama": "bind",
+  "jenis": "fn",
+  "baris": 1007
+ },
+ {
+  "nama": "bindSync",
+  "jenis": "fn",
+  "baris": 1165
+ },
+ {
+  "nama": "initialised",
+  "jenis": "state",
+  "baris": 1190
+ },
+ {
+  "nama": "init",
+  "jenis": "fn",
+  "baris": 1191
+ }
+]
