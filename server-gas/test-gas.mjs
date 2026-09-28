@@ -1399,11 +1399,16 @@ cek('ujiCepat() bawaan berjalan & membersihkan barisnya',
     criteria: { uniform: uni, idCard: !!idc, etika }, catatan: '',
   });
 
-  // G-001: 6 pengantaran, seragam BAGUS (+2) tiap kali, ID selalu ada.
-  // G-006: 6 pengantaran, seragam tidak sesuai (-1), tanpa ID.
+  // Angkanya dipilih supaya CACAH patuh dan JUMLAH nilai Uniform BERBEDA.
+  // Versi pertama uji ini memakai data yang kebetulan membuat keduanya sama
+  // besar, sehingga kolom yang keliru memakai jumlah nilai tetap lolos —
+  // dan bug itu baru ketahuan di laporan sungguhan.
+  //   G-001 : 6 pengantaran +2      -> patuh 6, jumlah nilai 12
+  //   G-006 : 3 pengantaran -1, 3 +1 -> patuh 3, jumlah nilai 0
+  //   total : antar 12, patuh 9, jumlah nilai 12, mutu 12/12 = 1,00
   ['01', '02', '03', '04', '05', '06'].forEach((d, i) => {
     kirim(`lap-a-${i}`, 'G-001', 1, `2034-03-${d}`, 2, 1, 3);
-    kirim(`lap-b-${i}`, 'G-006', 1, `2034-03-${d}`, -1, 0, -2);
+    kirim(`lap-b-${i}`, 'G-006', 1, `2034-03-${d}`, i % 2 === 0 ? -1 : 1, 0, -2);
   });
   sandbox.bangunRekap(BLN);
 
@@ -1435,14 +1440,35 @@ cek('ujiCepat() bawaan berjalan & membersihkan barisnya',
       cariLap('Jumlah pengantaran dinilai') === 12,
       String(cariLap('Jumlah pengantaran dinilai')));
     cek('Cacah berseragam sesuai memakai PATUH, bukan jumlah nilai Uniform',
-      cariLap('Pengantaran berseragam sesuai') === 6,
-      `${cariLap('Pengantaran berseragam sesuai')} (G-001 +2 enam kali; G-006 -1 tidak dihitung)`);
-    // Jumlah nilai Uniform = 6*(+2) + 6*(-1) = +6, jadi rata-ratanya 6/12 = 0,5.
-    // Kalau cacah patuh keliru memakai jumlah nilai, angkanya kebetulan 6 juga —
-    // karena itu mutunya diperiksa terpisah dari cacahnya.
+      cariLap('Pengantaran berseragam sesuai') === 9,
+      `${cariLap('Pengantaran berseragam sesuai')} (harus 9, bukan 12 yang jumlah nilainya)`);
     const mutuLap = cariLap('Mutu berpakaian');
     cek('Mutu berpakaian dihitung dari jumlah nilai bertanda, bukan cacah',
-      Math.abs(Number(mutuLap) - 0.5) < 0.001, String(mutuLap));
+      Math.abs(Number(mutuLap) - 1) < 0.001, String(mutuLap));
+
+    // Baris penjumlah tabel ikut diperiksa. Ringkasan di bagian A sempat benar
+    // sementara baris "SELURUH GUIDE" di tabel B masih memakai jumlah nilai —
+    // memeriksa ringkasannya saja tidak cukup.
+    const barisTabel = (label) => shLap.data.find(b => String((b || [])[0] ?? '') === label);
+    const seluruh = barisTabel('SELURUH GUIDE');
+    cek('Baris SELURUH GUIDE memakai cacah patuh, bukan jumlah nilai Uniform',
+      !!seluruh && seluruh[3] === 9,
+      seluruh ? `antar=${seluruh[2]} seragam sesuai=${seluruh[3]} (harus 9)` : 'baris tidak ketemu');
+    cek('Baris SELURUH GUIDE tidak memuat angka rusak',
+      !!seluruh && seluruh.slice(1, 9).every(v => typeof v !== 'number' || isFinite(v)),
+      seluruh ? seluruh.slice(1, 9).join(' | ') : '-');
+
+    const jumlahA1 = barisTabel('JUMLAH REGU A1');
+    cek('Baris JUMLAH REGU juga memakai cacah patuh',
+      !!jumlahA1 && jumlahA1[3] === 6,
+      jumlahA1 ? `seragam sesuai=${jumlahA1[3]} (harus 6)` : 'baris tidak ketemu');
+
+    // NaN masuk ke Sheets sebagai #NUM!. Satu guide terdaftar tanpa data sudah
+    // cukup membuat seluruh ringkasan rusak, dan di spreadsheet asli ada
+    // ratusan guide seperti itu — jadi ini harus dijaga menyeluruh.
+    const adaNaN = shLap.data.some(b => (b || []).some(v => typeof v === 'number' && !isFinite(v)));
+    cek('Tidak ada satu pun angka NaN/#NUM! di seluruh laporan', !adaNaN,
+      adaNaN ? 'masih ada angka rusak' : 'bersih');
   }
 }
 

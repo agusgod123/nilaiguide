@@ -686,7 +686,7 @@ function lapTulisTabelRegu_(sh, r, guide) {
   });
 
   const semua = lapJumlahkan_(guide);
-  data.push(['SELURUH GUIDE', semua.guide, semua.hari, semua.uniform, semua.idcard,
+  data.push(['SELURUH GUIDE', semua.guide, semua.hari, semua.patuh, semua.idcard,
              semua.taat, semua.etika, semua.review, semua.total]);
   tebal.push(n);
 
@@ -697,10 +697,10 @@ function lapTulisTabelRegu_(sh, r, guide) {
   });
 
   r = lapCatatan_(sh, r,
-    'Catatan: 15 guide bertugas di regu Asing sekaligus Domestik, sehingga terhitung pada kedua ' +
-    'kategori. Jumlah baris "Sub ASING" + "Sub DOMESTIK" karena itu melebihi baris "SELURUH GUIDE". ' +
-    'Persentase gabungan hampir tidak terpengaruh, karena orang yang sama terhitung dua kali di ' +
-    'pembilang maupun penyebut.');
+    'Catatan: "Seragam sesuai" adalah CACAH pengantaran yang berpakaian sesuai (nilai +1 atau +2), ' +
+    'bukan jumlah nilai Uniform — pada skala -1/+1/+2 jumlah nilainya bisa negatif dan tidak bisa ' +
+    'dibandingkan dengan kolom ID-Card. Tiap guide kini hanya masuk satu regu, jadi "Sub ASING" + ' +
+    '"Sub DOMESTIK" tepat sama dengan "SELURUH GUIDE".');
   return r;
 }
 
@@ -825,7 +825,7 @@ function lapTulisDaftarRegu_(sh, r, guide, regu, huruf) {
   sh.getRange(r0, 1, data.length, 1).setHorizontalAlignment('left');
 
   const j = lapJumlahkan_(daftar);
-  r = lapIsiTabel_(sh, r, [['JUMLAH REGU ' + regu.kode, '', j.hari, j.uniform, j.idcard,
+  r = lapIsiTabel_(sh, r, [['JUMLAH REGU ' + regu.kode, '', j.hari, j.patuh, j.idcard,
                             j.taat, j.etika, j.review, j.total]],
                    { 3: '0', 4: '0', 5: '0', 6: '0.0%', 7: '0', 8: '0', 9: '0' });
   sh.getRange(r - 1, 1, 1, LAP_KOL).setFontWeight('bold').setBackground('#f4f6f7');
