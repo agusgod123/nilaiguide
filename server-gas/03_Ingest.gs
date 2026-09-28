@@ -196,7 +196,7 @@ function doPost(e) {
             evaluationId: it.evaluationId,
             errors: [(namaResmi[gid] || gid) + ' baru saja dinilai di Pos ' + Number(it.pos) +
                      ' (' + Math.round(Math.abs(bentrok.ms - msIt) / 60000) + ' menit dari penilaian ini)' +
-                     ' — jeda minimal ' + JEDA_PENILAIAN_MENIT + ' menit, jadi ini kemungkinan salah pencet.' +
+                     ' — jeda minimal ' + JEDA_TOLAK_MENIT + ' menit, jadi ini hampir pasti salah pencet.' +
                      ' Kalau memang pengantaran berikutnya, tunggu jedanya habis.' +
                      ' Untuk membetulkan nilainya, kirim koreksi (koreksiDari: ' + bentrok.id + ')'],
             sudahDinilai: true,
@@ -346,14 +346,17 @@ function kunciGuidePos_(guideId, pos) {
 
 /**
  * Cari penilaian aktif atas guide & pos yang sama yang jaraknya lebih dekat
- * dari JEDA_PENILAIAN_MENIT. Selisih diambil mutlak supaya entri offline yang
- * tiba belakangan ikut tertangkap.
+ * dari JEDA_TOLAK_MENIT. Selisih diambil mutlak supaya entri offline yang tiba
+ * belakangan dengan cap waktu lebih awal ikut tertangkap.
+ *
+ * Server hanya menegakkan ambang TOLAK. Rentang peringatan ditangani aplikasi,
+ * supaya petugas bisa meneruskan pengantaran yang memang sah.
  * @return {{ms:number,id:string}|null}
  */
 function bentrokJeda_(jamAktif, kunciGP, ms) {
   var daftar = jamAktif[kunciGP];
   if (!daftar || !daftar.length) return null;
-  var batas = JEDA_PENILAIAN_MENIT * 60000;
+  var batas = JEDA_TOLAK_MENIT * 60000;
   for (var i = 0; i < daftar.length; i++) {
     if (Math.abs(daftar[i].ms - ms) < batas) return daftar[i];
   }

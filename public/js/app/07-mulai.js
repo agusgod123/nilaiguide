@@ -25,6 +25,16 @@
       if (ulang) { App.cobaKirimLagi(ulang.dataset.retry); return; }
       const betul = e.target.closest('[data-fix]');
       if (betul) { App.mulaiKoreksi(betul.dataset.fix); return; }
+      // "Ya, ini pengantaran berikutnya": petugas menyatakan penilaian yang
+      // berdekatan itu memang sah, lalu formulirnya dikirim ulang apa adanya.
+      const lanjut = e.target.closest('[data-lanjut]');
+      if (lanjut) {
+        App.state.form.lanjutJeda = lanjut.dataset.lanjut;
+        const kotak = $('#guideAmbigu');
+        if (kotak) { kotak.hidden = true; kotak.textContent = ''; }
+        App.submitEval({ preventDefault() {} });
+        return;
+      }
       if (e.target.closest('[data-batal-koreksi]')) { App.batalKoreksi(); return; }
       const nav = e.target.closest('[data-nav]');
       if (nav) { App.go(nav.dataset.nav); }
@@ -50,6 +60,9 @@
     $('#homePos').addEventListener('change', e => { App.state.form.pos = Number(e.target.value); Sync.Settings.set({ pos: App.state.form.pos }); App.saveDraft(); });
     $('#posSelect').addEventListener('change', e => {
       App.state.form.pos = Number(e.target.value);
+      // Persetujuan jeda terikat pada guide DAN pos tertentu; pindah pos
+      // berarti situasinya lain, jadi petugas ditanya lagi.
+      App.state.form.lanjutJeda = null;
       Sync.Settings.set({ pos: App.state.form.pos });
       $('#homePos').value = e.target.value;
       // Peringatan penilaian ganda terikat pada pos, jadi diperiksa ulang
@@ -77,6 +90,9 @@
         else $('#guidePicked').classList.add('hidden');
         App.tampilkanKandidat(null);
       }
+      // Ganti guide berarti situasinya lain: persetujuan jeda untuk guide
+      // sebelumnya tidak boleh ikut terbawa.
+      App.state.form.lanjutJeda = null;
       App.saveDraft();
       $('#draftNote').hidden = false;
     });

@@ -46,6 +46,14 @@ const tanggalWita = (iso) => {
 };
 const kunciPos = (guideId, pos, tgl) => `${String(guideId).trim()}|${Number(pos) || 0}|${tgl}`;
 
+// Kunci pengaman jeda: guide + pos, lintas hari (jedanya dihitung dari jam).
+const kunciGuidePos = (guideId, pos) => `${String(guideId).trim()}|${Number(pos) || 0}`;
+
+// Harus SAMA dengan JEDA_TOLAK_MENIT di server-gas/00_Konstanta.gs. Backend ini
+// alternatif dari Apps Script, jadi aturan terimanya tidak boleh berbeda —
+// kalau berbeda, perangkat yang sama berperilaku lain tergantung backend.
+const JEDA_TOLAK_MENIT = 15;
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -251,14 +259,24 @@ const server = http.createServer(async (req, res) => {
     const semua = store.listEvaluations(100000);
     // aktifPos: kunci -> evaluationId baris yang masih berlaku
     // barisId  : evaluationId -> { status, kunci }  (untuk memvalidasi koreksi)
-    const aktifPos = new Map();
+    // jamAktif: 'guideId|pos' -> [{ms, id}] penilaian yang masih berlaku
+    const jamAktif = new Map();
     const barisId = new Map();
     for (const r of semua) {
       const kunci = kunciPos(r.guideId, r.pos, tanggalWita(r.timestamp));
+      const kunciGP = kunciGuidePos(r.guideId, r.pos);
       const status = String(r.status || 'aktif').toLowerCase();
-      barisId.set(r.evaluationId, { status, kunci });
-      if (status !== 'diganti') aktifPos.set(kunci, r.evaluationId);
+      const ms = new Date(r.timestamp).getTime();
+      barisId.set(r.evaluationId, { status, kunci, kunciGP });
+      if (status !== 'diganti' && Number.isFinite(ms)) {
+        if (!jamAktif.has(kunciGP)) jamAktif.set(kunciGP, []);
+        jamAktif.get(kunciGP).push({ ms, id: r.evaluationId });
+      }
     }
+    // Selisih MUTLAK: entri offline bisa tiba belakangan dengan cap waktu lebih
+    // awal, dan itu pencetan ganda yang sama.
+    const bentrokJeda = (kunciGP, ms) => (jamAktif.get(kunciGP) || [])
+      .find(x => Math.abs(x.ms - ms) < JEDA_TOLAK_MENIT * 60000) || null;
     const idAda = new Set(semua.map(r => r.evaluationId));
     const perluDitandai = [];
 
@@ -286,6 +304,8 @@ const server = http.createServer(async (req, res) => {
 
       const tgl = tanggalWita(item.timestamp);
       const kunci = kunciPos(gid, item.pos, tgl);
+      const kunciGP = kunciGuidePos(gid, item.pos);
+      const msItem = new Date(item.timestamp).getTime();
       const koreksiDari = String(item.koreksiDari || '').trim();
 
       if (koreksiDari) {
@@ -314,22 +334,34 @@ const server = http.createServer(async (req, res) => {
         }
         perluDitandai.push(koreksiDari);
         asal.status = 'diganti';
+        // Baris yang digantikan tidak boleh lagi memicu pengaman jeda.
+        const daftarAsal = jamAktif.get(asal.kunciGP);
+        if (daftarAsal) {
+          const i = daftarAsal.findIndex(x => x.id === koreksiDari);
+          if (i > -1) daftarAsal.splice(i, 1);
+        }
       } else {
-        // SATU POS HANYA MENILAI SATU KALI PER HARI. Pos lain tetap boleh.
-        if (aktifPos.has(kunci)) {
+        // PENGAMAN JEDA, menggantikan "satu pos satu kali sehari". Guide yang
+        // sama boleh dinilai berkali-kali sehari di pos yang sama — itu memang
+        // pengantaran berbeda. Yang ditolak hanya yang beruntun.
+        const bentrok = bentrokJeda(kunciGP, msItem);
+        if (bentrok) {
           rejected.push({
             evaluationId: item.evaluationId,
-            errors: [`${namaResmi?.[gid] || gid} sudah dinilai di Pos ${item.pos} pada ${tgl}` +
-                     ' — satu pos hanya menilai satu kali per hari.' +
-                     ` Untuk membetulkan nilainya, kirim koreksi (koreksiDari: ${aktifPos.get(kunci)})`],
+            errors: [`${namaResmi?.[gid] || gid} baru saja dinilai di Pos ${item.pos}` +
+                     ` (${Math.round(Math.abs(bentrok.ms - msItem) / 60000)} menit dari penilaian ini)` +
+                     ` — jeda minimal ${JEDA_TOLAK_MENIT} menit, jadi ini hampir pasti salah pencet.` +
+                     ` Untuk membetulkan nilainya, kirim koreksi (koreksiDari: ${bentrok.id})`],
             sudahDinilai: true,
-            aktifSaatIni: aktifPos.get(kunci),
+            terlaluCepat: true,
+            aktifSaatIni: bentrok.id,
           });
           continue;
         }
       }
-      aktifPos.set(kunci, item.evaluationId);
-      barisId.set(item.evaluationId, { status: 'aktif', kunci });
+      if (!jamAktif.has(kunciGP)) jamAktif.set(kunciGP, []);
+      jamAktif.get(kunciGP).push({ ms: msItem, id: item.evaluationId });
+      barisId.set(item.evaluationId, { status: 'aktif', kunci, kunciGP });
 
       // Nama guide diambil dari daftar resmi: perangkat bisa memakai salinan lama.
       if (namaResmi?.[gid]) item.guideName = namaResmi[gid];

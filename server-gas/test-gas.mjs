@@ -923,11 +923,20 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
       mundur.accepted.length === 0 && mundur.rejected.length === 1,
       mundur.rejected[0] ? mundur.rejected[0].errors[0] : '-');
 
+    // Server hanya menegakkan ambang TOLAK. Rentang peringatan (15-60 menit)
+    // sengaja DITERIMA di sini: lama satu siklus antar naik-turun belum pernah
+    // terukur, jadi menolak keras di 60 menit berisiko membuang pengantaran
+    // yang sah. Yang bertanya di rentang itu aplikasi, dan petugas memutuskan.
+    const sedang = kirim('sp-2d', 'G-001', 1, '2026-10-05T06:25:00.000Z');
+    cek('Jeda 25 menit diterima server — itu wilayah peringatan aplikasi',
+      sedang.accepted.length === 1,
+      sedang.rejected.length ? sedang.rejected[0].errors[0] : 'diterima');
+
     // Pos BERBEDA harus tetap boleh, bahkan pada menit yang sama
     const p2 = kirim('sp-3', 'G-001', 2, '2026-10-05T06:05:00.000Z');
     const p3 = kirim('sp-4', 'G-001', 3, '2026-10-05T06:06:00.000Z');
     cek('Pos berbeda tidak terkena jeda — jedanya per guide DAN per pos',
-      p2.accepted.length === 1 && p3.accepted.length === 1 && ev.getLastRow() === 5);
+      p2.accepted.length === 1 && p3.accepted.length === 1 && ev.getLastRow() === 6);
 
     // Hari berikutnya jelas di luar jeda
     const besok = kirim('sp-5', 'G-001', 1, '2026-10-06T02:00:00.000Z');
@@ -962,14 +971,15 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
       borongJauh.accepted.length === 2 && borongJauh.rejected.length === 0,
       `${borongJauh.accepted.length} diterima`);
 
-    // Cacah pengantaran, bukan cacah pos: 5 Okt G-001 dinilai di pos 1 (2x),
-    // pos 2, dan pos 3 -> 4 pengantaran. Dulu angka ini mentok di 3.
+    // Cacah pengantaran, bukan cacah pos: 5 Okt G-001 dinilai di pos 1 (3x —
+    // 02.00, 06.00, 06.25), pos 2, dan pos 3 -> 5 pengantaran. Dulu angka ini
+    // mentok di 3, karena yang dicacah jumlah pos.
     sandbox.bangunRekap('2026-10');
     const khOkt = doc.getSheetByName('Rekap Kehadiran 2026-10');
     const bOkt = khOkt.getRange(5, 1, 1, 5).getValues()[0];
     cek('Kehadiran mencacah pengantaran dan boleh melebihi jumlah pos',
-      bOkt[0] === 'Gusti Alit Astawa' && bOkt[2] === 4,
-      `5 Okt: ${bOkt[2]} (pos 1 dua kali, pos 2, pos 3)`);
+      bOkt[0] === 'Gusti Alit Astawa' && bOkt[2] === 5,
+      `5 Okt: ${bOkt[2]} (pos 1 tiga kali, pos 2, pos 3)`);
 
     ev.data = [ev.data[0]];
     props.clear();

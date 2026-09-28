@@ -72,11 +72,25 @@ var UNIFORM_PATUH = 1;
 
 // Pengaman salah pencet, MENGGANTIKAN aturan "satu pos satu kali sehari".
 // Sejak penilaian dihitung per pengantaran, satu guide boleh dinilai berkali-
-// kali sehari di pos yang sama — jadi tidak ada lagi kunci harian yang menahan
-// pencetan ganda. Yang tersisa: dua penilaian atas guide dan pos yang sama
-// dalam jeda sesingkat ini hampir pasti salah pencet, bukan pengantaran baru.
-// Satu siklus antar naik-turun jauh lebih lama dari ini.
-var JEDA_PENILAIAN_MENIT = 30;
+// kali sehari di pos yang sama, jadi tidak ada lagi kunci harian yang menahan
+// pencetan ganda. Penggantinya DUA ambang, bukan satu:
+//
+//   TOLAK (server)      — dua penilaian atas guide dan pos yang sama dalam jeda
+//                         sesingkat ini hampir pasti salah pencet. Ditegakkan
+//                         di server karena hanya server yang tahu apa yang baru
+//                         dicatat perangkat LAIN di pos yang sama.
+//   PERINGATAN (aplikasi) — di atas ambang tolak tapi masih mencurigakan.
+//                         Aplikasi bertanya, petugas yang memutuskan.
+//
+// Kenapa peringatannya tidak ditegakkan server juga: lama satu siklus antar
+// naik-turun BELUM PERNAH terukur, karena aturan lama melarang penilaian kedua
+// di pos yang sama pada hari yang sama sehingga datanya tidak ada. Menolak
+// keras di 60 menit berisiko membuang pengantaran yang sah, dan penolakan
+// server berarti datanya hilang kecuali petugas ingat mengirim ulang.
+// Setel ulang angkanya begitu data Oktober menunjukkan siklus sebenarnya.
+var JEDA_TOLAK_MENIT = 15;
+
+var JEDA_PERINGATAN_MENIT = 60;
 
 
 // Syarat minimal hadir agar seorang guide masuk tabel peringkat di tab Dasbor.

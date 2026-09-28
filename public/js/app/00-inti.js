@@ -24,7 +24,12 @@
   App.state = {
     guides: [],
     current: 'home',
-    form: { pos: 1, guide: null, crit: { idCard: null, uniform: null, etika: 0 }, catatan: '' },
+    // lanjutJeda = evaluationId penilaian sebelumnya yang sudah petugas
+    // nyatakan "ini pengantaran berikutnya". Disimpan per formulir, dan hangus
+    // begitu guide atau pos berganti — persetujuan untuk satu situasi tidak
+    // boleh diam-diam berlaku untuk situasi lain.
+    form: { pos: 1, guide: null, crit: { idCard: null, uniform: null, etika: 0 },
+            catatan: '', lanjutJeda: null },
     historyFilter: 'all',
     /**
      * Penilaian yang sedang dibetulkan, atau null.

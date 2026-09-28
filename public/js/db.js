@@ -179,10 +179,15 @@
   const wrap = req => { const o = { __req: req }; return o; };
 
   /* ---------------------- API publik ---------------------- */
-  // Harus SAMA dengan JEDA_PENILAIAN_MENIT di server (00_Konstanta.gs).
-  // Kalau aplikasi lebih longgar, staff baru tahu kirimannya ditolak setelah
-  // formulir terlanjur diisi; kalau lebih ketat, ia menahan penilaian yang sah.
-  const JEDA_PENILAIAN_MENIT = 30;
+  // Harus SAMA dengan JEDA_TOLAK_MENIT di server (00_Konstanta.gs). Kalau
+  // aplikasi lebih longgar, staff baru tahu kirimannya ditolak setelah formulir
+  // terlanjur diisi; kalau lebih ketat, ia menahan penilaian yang sah.
+  const JEDA_TOLAK_MENIT = 15;
+
+  // Ambang peringatan hanya hidup di aplikasi — server TIDAK menegakkannya.
+  // Di rentang ini petugas yang memutuskan: pengantaran berikutnya diteruskan,
+  // salah pencet dibetulkan.
+  const JEDA_PERINGATAN_MENIT = 60;
 
   const DB = {
     STORAGE_LIMIT_BYTES,
@@ -326,10 +331,13 @@
      * dengan yang ditegakkan server, kalau tidak aplikasi menakut-nakuti staff
      * untuk kiriman yang sebenarnya akan diterima.
      */
+    JEDA_TOLAK_MENIT,
+    JEDA_PERINGATAN_MENIT,
+
     async penilaianKembar(guideId, pos, iso) {
-      const batas = JEDA_PENILAIAN_MENIT * 60000;
+      const batas = JEDA_PERINGATAN_MENIT * 60000;
       const ms = new Date(iso).getTime();
-      return (await DB.all()).find(e =>
+      const cocok = (await DB.all()).filter(e =>
         !e.corrupt &&
         // Yang sudah dibetulkan tidak lagi menghalangi: penilaian penggantinya
         // yang berlaku, dan itu memang satu-satunya untuk pos & hari itu.
@@ -343,7 +351,12 @@
         e.guideId === guideId &&
         Number(e.pos) === Number(pos) &&
         // Selisih MUTLAK: entri offline bisa bercap waktu lebih awal.
-        Math.abs(new Date(e.timestamp).getTime() - ms) < batas) || null;
+        Math.abs(new Date(e.timestamp).getTime() - ms) < batas);
+      if (!cocok.length) return null;
+      // Yang TERDEKAT, bukan yang pertama ketemu. Pesannya menyebut selisih
+      // menit, dan menyebut entri yang lebih jauh akan membingungkan petugas.
+      const jarak = (e) => Math.abs(new Date(e.timestamp).getTime() - ms);
+      return cocok.reduce((a, b) => (jarak(b) < jarak(a) ? b : a));
     },
 
     /**

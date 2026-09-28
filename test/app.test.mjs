@@ -730,14 +730,16 @@ check('Pengiriman ulang tidak menggandakan data di server (append-only)', before
   check('Alasannya diterangkan, bukan sekadar gagal diam-diam',
     !$('#guideAmbigu').hidden &&
     $('#guideAmbigu').textContent.includes('baru dinilai di Pos') &&
-    $('#guideAmbigu').textContent.includes('kemungkinan salah pencet') &&
-    $('#guideAmbigu').textContent.includes('pengantaran berikutnya'),
+    $('#guideAmbigu').textContent.includes('salah pencet'),
     $('#guideAmbigu').textContent.slice(0, 80));
-  // Ambang aplikasi harus sama dengan server, kalau tidak staff ditakut-takuti
-  // untuk kiriman yang sebenarnya diterima — atau sebaliknya.
-  check('Di luar jeda, pos yang sama tidak lagi dianggap kembar',
+  // Di bawah ambang tolak server, "lanjutkan" TIDAK boleh ditawarkan: kirimannya
+  // pasti gagal, dan menawarkannya hanya membuat petugas menekan tombol sia-sia.
+  check('Di bawah ambang tolak, hanya koreksi yang ditawarkan',
+    !$('#guideAmbigu [data-lanjut]') && !!$('#guideAmbigu [data-fix]'),
+    $('#guideAmbigu').innerHTML.includes('data-lanjut') ? 'ada tombol lanjut' : 'hanya koreksi');
+  check('Di luar jendela peringatan, pos yang sama tidak lagi dianggap kembar',
     (await window.DB.penilaianKembar(gid, POS,
-      new Date(Date.now() + 31 * 60000).toISOString())) === null);
+      new Date(Date.now() + 61 * 60000).toISOString())) === null);
 
   // ...tetapi POS LAIN tetap boleh menilai guide yang sama pada hari yang sama
   click($('#btnNewEval')); await sleep(50);
@@ -941,16 +943,23 @@ check('Pengiriman ulang tidak menggandakan data di server (append-only)', before
     /tidak ada di daftar guide/.test(asing.body.rejected[0].errors.join(' ')),
     asing.body.rejected[0] ? asing.body.rejected[0].errors.join(' ') : '');
 
-  // 3) Satu pos hanya menilai satu guide sekali per hari
+  // 3) Pengaman jeda — aturannya harus sama persis dengan Apps Script, kalau
+  //    tidak perangkat yang sama berperilaku lain tergantung backend.
   const t1 = '2031-03-02T02:00:00.000Z';
   const a = await kirim(dasar('srv-a-' + Date.now(), 'G-001', 1, t1));
   check('Penilaian pertama diterima server', a.body.accepted.length === 1);
   const b = await kirim(dasar('srv-b-' + Date.now(), 'G-001', 1, t1));
-  check('Pos yang sama pada hari yang sama DITOLAK server',
-    b.body.accepted.length === 0 && b.body.rejected[0].sudahDinilai === true,
+  check('Penilaian beruntun di pos yang sama DITOLAK server',
+    b.body.accepted.length === 0 && b.body.rejected[0].terlaluCepat === true,
     b.body.rejected[0] ? b.body.rejected[0].errors.join(' ') : '');
+  // Di luar ambang tolak, pengantaran berikutnya di pos yang sama SAH.
+  const b2 = await kirim(dasar('srv-b2-' + Date.now(), 'G-001', 1,
+    '2031-03-02T03:00:00.000Z'));
+  check('Pengantaran berikutnya di pos yang sama diterima server',
+    b2.body.accepted.length === 1,
+    b2.body.rejected.length ? b2.body.rejected[0].errors.join(' ') : 'diterima');
   const c2 = await kirim(dasar('srv-c-' + Date.now(), 'G-001', 2, t1));
-  check('Pos LAIN pada hari yang sama tetap diterima', c2.body.accepted.length === 1);
+  check('Pos LAIN tidak terkena jeda sama sekali', c2.body.accepted.length === 1);
 
   // 4) Kiriman ulang evaluationId yang sama tetap "accepted duplicate" —
   //    kalau ditolak, antrean di aplikasi macet selamanya.
@@ -1320,6 +1329,65 @@ check('Tidak ada error JavaScript fatal', jsErrors.length === 0, jsErrors.slice(
     (await window.DB.counts()).total === sebelum + 1 &&
     !!simpanBagus && simpanBagus.criteria.uniform === 2 && simpanBagus.synced === true,
     simpanBagus ? `uniform=${simpanBagus.criteria.uniform} synced=${simpanBagus.synced}` : 'tidak tersimpan');
+}
+
+/* ---------- Jeda: wilayah peringatan, petugas yang memutuskan ---------- */
+// Dua lapis. Di bawah ambang tolak server, kiriman ditahan mentah. Di antara
+// ambang tolak dan ambang peringatan, aplikasi BERTANYA — karena lama satu
+// siklus antar naik-turun belum pernah terukur, jadi menolak keras di situ
+// berisiko membuang pengantaran yang sah.
+{
+  const NAMA = 'I Komang Bayu';          // belum dipakai blok lain
+  const POS = 1;
+  const g = window.App.findGuide(NAMA);
+  check('Guide untuk uji jeda ditemukan dan tunggal', !!g, g ? g.guideId : 'tidak ada');
+
+  const sebelum = (await window.DB.counts()).total;
+  // Penilaian 25 menit lalu: di atas ambang tolak (15), di bawah peringatan (60).
+  await window.DB.save({
+    evaluationId: 'uji-jeda-lama', guideId: g.guideId, guideName: NAMA, pos: POS,
+    timestamp: new Date(Date.now() - 25 * 60000).toISOString(),
+    criteria: { idCard: true, uniform: 1, etika: 0 }, catatan: '',
+  });
+  await sleep(120);
+
+  click($('#btnNewEval')); await sleep(60);
+  setVal($('#posSelect'), String(POS));
+  setVal($('#guideInput'), NAMA); await sleep(60);
+  click($('[data-crit=idCard] .seg.yes'));
+  click($('[data-crit=uniform] .seg.yes'));
+  $('#formEval').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await sleep(500);
+
+  check('Jeda 25 menit tidak langsung disimpan, tapi ditanyakan lebih dulu',
+    (await window.DB.counts()).total === sebelum + 1 && !$('#guideAmbigu').hidden,
+    `${(await window.DB.counts()).total} entri (harus ${sebelum + 1})`);
+  check('Di wilayah peringatan, meneruskan DAN membetulkan sama-sama ditawarkan',
+    !!$('#guideAmbigu [data-lanjut]') && !!$('#guideAmbigu [data-fix]'),
+    $('#guideAmbigu').textContent.slice(0, 80));
+  check('Selisih menitnya disebut, bukan sekadar "terlalu dekat"',
+    /25 menit lalu/.test($('#guideAmbigu').textContent),
+    $('#guideAmbigu').textContent.slice(0, 80));
+
+  click($('#guideAmbigu [data-lanjut]'));
+  await sleep(800);
+  check('Setelah petugas menyatakan ini pengantaran berikutnya, penilaian tersimpan',
+    (await window.DB.counts()).total === sebelum + 2,
+    `${(await window.DB.counts()).total} entri (harus ${sebelum + 2})`);
+  const baru = (await window.DB.all())
+    .filter(e => e.guideId === g.guideId && e.evaluationId !== 'uji-jeda-lama');
+  check('Yang tersimpan penilaian BARU, bukan menimpa yang lama',
+    baru.length === 1 && !baru[0].koreksiDari,
+    baru.length ? `${baru.length} entri baru` : 'tidak ada');
+  check('Server menerima penilaian yang diteruskan itu',
+    baru.length === 1 && baru[0].synced === true,
+    baru.length ? String(baru[0].lastError || baru[0].synced) : '-');
+
+  // Persetujuan berlaku untuk satu situasi saja — ganti guide, ditanya lagi.
+  click($('#btnNewEval')); await sleep(60);
+  check('Persetujuan jeda tidak terbawa ke formulir berikutnya',
+    window.App.state.form.lanjutJeda === null,
+    String(window.App.state.form.lanjutJeda));
 }
 
 /* ---------- ringkasan ---------- */

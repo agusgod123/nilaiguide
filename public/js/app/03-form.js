@@ -18,7 +18,8 @@
 
   App.resetForm = function resetForm(keepPos = true) {
     const pos = keepPos ? App.state.form.pos : 1;
-    App.state.form = { pos, guide: null, crit: { idCard: null, uniform: null, etika: 0 }, catatan: '' };
+    App.state.form = { pos, guide: null, crit: { idCard: null, uniform: null, etika: 0 },
+                       catatan: '', lanjutJeda: null };
     $('#posSelect').value = String(pos);
     $('#guideInput').value = '';
     $('#catatan').value = '';
@@ -101,9 +102,9 @@
     catch { return; }
     // Guide sudah diganti selagi menunggu — jangan timpa keterangannya
     if (!kembar || el.dataset.guideId !== g.guideId) return;
-    el.innerHTML += `<br><small>🚫 Baru dinilai di Pos ${pos} pukul ` +
-                    `${esc(fmtTime(kembar.timestamp).split(' ').pop())} — terlalu dekat. ` +
-                    `Tunggu jedanya habis, atau betulkan penilaian itu.</small>`;
+    el.innerHTML += `<br><small>⚠️ Sudah dinilai di Pos ${pos} pukul ` +
+                    `${esc(fmtTime(kembar.timestamp).split(' ').pop())}. ` +
+                    `Kalau ini pengantaran berikutnya, lanjutkan saja.</small>`;
   }
 
   /** Tawarkan nama-nama yang mungkin dimaksud saat ketikan masih ambigu. */
@@ -144,29 +145,49 @@
     // Dalam mode koreksi, pos-nya dikunci ke penilaian yang sedang dibetulkan.
     const pos = App.state.koreksi ? Number(App.state.koreksi.pos) : Number($('#posSelect').value);
 
-    // Satu pos hanya menilai satu kali per hari. Server menolak kiriman kedua,
-    // jadi menahannya di sini bukan sekadar peringatan — melainkan mencegah
-    // staff mengisi formulir yang sudah pasti ditolak nanti.
-    // Pos LAIN tetap boleh menilai guide yang sama pada hari yang sama.
+    // DUA LAPIS pengaman salah pencet. Guide yang sama boleh dinilai berkali-
+    // kali sehari di pos yang sama — itu memang pengantaran berbeda — jadi yang
+    // dijaga hanya jaraknya:
+    //   < JEDA_TOLAK       : server pasti menolak. Ditahan di sini supaya staff
+    //                        tidak mengisi formulir yang sudah pasti gagal.
+    //   < JEDA_PERINGATAN  : mencurigakan tapi mungkin sah. Petugas yang tahu
+    //                        keadaan di lapangan, jadi dia yang memutuskan.
+    // Pos LAIN tidak pernah terkena — jedanya per guide DAN per pos.
     // Saat sedang mengoreksi, penilaian "kembar" itu justru yang dibetulkan.
     const kembar = App.state.koreksi ? null : await DB.penilaianKembar(g.guideId, pos, DB.sekarangISO());
     if (kembar) {
       const c = kembar.criteria || {};
-      App.toast(`${g.guideName} baru saja dinilai di Pos ${pos}`, 'warn', '🚫');
-      const el = $('#guideAmbigu');
-      if (el) {
-        el.innerHTML =
-          `🚫 <strong>${esc(g.guideName)}</strong> baru dinilai di Pos ${pos} ` +
-          `pukul ${esc(fmtTime(kembar.timestamp).split(' ').pop())} — ` +
-          `Uniform ${labelUniform(c.uniform)}, ID ${c.idCard ? 'Ya' : 'Tidak'}, ` +
-          `Etika ${App.nilaiEtika(c.etika)}.<br>` +
-          `Jaraknya terlalu dekat, jadi ini kemungkinan salah pencet. Kalau memang ` +
-          `pengantaran berikutnya, tunggu jedanya habis. Pos lain tetap bisa sekarang.` +
-          `<br><button type="button" class="chip retrybtn" data-fix="${esc(kembar.evaluationId)}">` +
-          `✏️ Betulkan penilaian itu</button>`;
-        el.hidden = false;
+      const selisih = Math.max(0, Math.round(
+        Math.abs(new Date(kembar.timestamp).getTime() - new Date(DB.sekarangISO()).getTime()) / 60000));
+      const pastiDitolak = selisih < DB.JEDA_TOLAK_MENIT;
+      // Persetujuan berlaku untuk SATU penilaian sebelumnya saja. Kalau
+      // sementara itu muncul entri lain yang lebih dekat, petugas ditanya lagi.
+      const sudahDiyakinkan = App.state.form.lanjutJeda === kembar.evaluationId;
+
+      if (pastiDitolak || !sudahDiyakinkan) {
+        const jam = esc(fmtTime(kembar.timestamp).split(' ').pop());
+        const rincian = `Uniform ${labelUniform(c.uniform)}, ` +
+                        `ID ${c.idCard ? 'Ya' : 'Tidak'}, Etika ${App.nilaiEtika(c.etika)}`;
+        const perbaiki = `<button type="button" class="chip retrybtn" ` +
+                         `data-fix="${esc(kembar.evaluationId)}">✏️ Betulkan penilaian itu</button>`;
+        App.toast(`${g.guideName} dinilai di Pos ${pos} ${selisih} menit lalu`,
+                  'warn', pastiDitolak ? '🚫' : '⚠️');
+        const el = $('#guideAmbigu');
+        if (el) {
+          el.innerHTML = pastiDitolak
+            ? `🚫 <strong>${esc(g.guideName)}</strong> baru dinilai di Pos ${pos} pukul ${jam} ` +
+              `(${selisih} menit lalu) — ${esc(rincian)}.<br>` +
+              `Di bawah ${DB.JEDA_TOLAK_MENIT} menit server akan menolaknya sebagai salah pencet. ` +
+              `Kalau nilainya yang keliru, betulkan penilaian itu.<br>${perbaiki}`
+            : `⚠️ <strong>${esc(g.guideName)}</strong> sudah dinilai di Pos ${pos} pukul ${jam} ` +
+              `(${selisih} menit lalu) — ${esc(rincian)}.<br>` +
+              `Kalau ini pengantaran berikutnya, lanjutkan. Kalau tadi salah pencet, betulkan yang itu.` +
+              `<br><button type="button" class="chip" data-lanjut="${esc(kembar.evaluationId)}">` +
+              `✓ Ya, ini pengantaran berikutnya</button> ${perbaiki}`;
+          el.hidden = false;
+        }
+        return;
       }
-      return;
     }
 
     const evaluation = {
