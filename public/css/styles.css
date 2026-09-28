@@ -159,6 +159,10 @@ select.bigselect{appearance:none;background-image:url("data:image/svg+xml;utf8,<
 .seg + .seg{border-left:2px solid var(--garis)}
 .seg.yes.on{background:var(--hijau);color:#fff}
 .seg.no.on{background:var(--merah);color:#fff}
+/* Uniform punya tiga tingkat, jadi labelnya lebih panjang daripada Ya/Tidak.
+   Teks dikecilkan sedikit supaya ketiganya tetap muat di layar HP sempit. */
+.segmented.tiga .seg{font-size:.92rem;padding-left:.35rem;padding-right:.35rem}
+.seg.plus.on{background:var(--emas);color:#fff}
 .criterion.unset .segmented{border-color:var(--emas)}
 
 /* Penghitung Review — tombol besar, tanpa mengetik */

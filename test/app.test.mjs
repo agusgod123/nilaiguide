@@ -259,7 +259,7 @@ const seharusnya = dariServer.find(g => g.guideName === 'I Wayan Sweta');
 check('Model data sesuai PRD §7',
   !!saved.evaluationId && saved.guideId === seharusnya.guideId && saved.pos === 1 &&
   !isNaN(Date.parse(saved.timestamp)) &&
-  saved.criteria.idCard === true && saved.criteria.uniform === false && saved.criteria.etika === 2,
+  saved.criteria.idCard === true && saved.criteria.uniform === -1 && saved.criteria.etika === 2,
   JSON.stringify({ guideId: saved.guideId, pos: saved.pos, criteria: saved.criteria }));
 
 /* ---------- Etika boleh minus & dibatasi -5..+5 ---------- */
@@ -414,10 +414,14 @@ check('Rincian membawa waktu UTC & evaluationId untuk cross-check ke spreadsheet
   /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(csv));
 check('Angka tidak dikutip agar langsung bisa dijumlah di Excel',
   !/;"[01]"/.test(csv));
-check('Rekap CSV membawa kolom KEHADIRAN & ETIKA',
-  csv.includes('KEHADIRAN') && csv.includes('ETIKA'));
-check('Rekap per pos memakai satuan guide-hari, bukan jumlah penilaian',
-  csv.includes('Hadir (guide-hari)'));
+check('Rekap CSV membawa kolom ANTAR & ETIKA',
+  csv.includes('ANTAR') && csv.includes('ETIKA'));
+// Satuannya berubah dari guide-hari menjadi pengantaran: satu guide bisa
+// mengantar berkali-kali sehari dan tiap pengantaran dinilai sendiri.
+check('Rekap per pos memakai satuan pengantaran, bukan guide-hari',
+  csv.includes('(Antar = jumlah pengantaran yang dinilai di pos itu)'));
+check('Rekap CSV menjelaskan skala Uniform tiga tingkat',
+  csv.includes('SERAGAM SESUAI') && csv.includes('-1 tidak sesuai'));
 
 
 // Nilai entri yang tidak terbaca tidak boleh ikut dihitung sebagai 0
@@ -682,7 +686,7 @@ check('Pengiriman ulang tidak menggandakan data di server (append-only)', before
     hasRule && displayed.length === 0, displayed.join(', ') || 'aturan CSS ada');
 }
 
-/* ---------- Kehadiran: satu pos bernilai satu ----------
+/* ---------- Kehadiran: satu PENGANTARAN bernilai satu ----------
    Sengaja diletakkan paling akhir: blok ini menambah satu penilaian, dan
    pemeriksaan lain di atas bergantung pada jumlah data yang tetap. */
 {
@@ -715,15 +719,25 @@ check('Pengiriman ulang tidak menggandakan data di server (append-only)', before
   check('Hari berbeda tidak dianggap kembar',
     (await window.DB.penilaianKembar(gid, POS, '2020-01-01T02:00:00.000Z')) === null);
 
-  // Penilaian kedua di POS YANG SAMA harus DITAHAN — satu pos menilai satu kali
-  // sehari, dan server pasti menolaknya, jadi tidak ada gunanya diteruskan.
+  // Penilaian kedua BERUNTUN di pos yang sama harus DITAHAN. Bukan lagi karena
+  // "satu pos sekali sehari" — pengantaran berikutnya memang sah — melainkan
+  // karena jaraknya di bawah jeda minimum, jadi server pasti menolaknya dan
+  // tidak ada gunanya diteruskan.
   await simpanPenilaian();
-  check('Penilaian ulang di pos yang sama DITAHAN aplikasi',
+  check('Penilaian beruntun di pos yang sama DITAHAN aplikasi',
     (await window.DB.counts()).total === sesudahSatu,
     `${sesudahSatu} -> ${(await window.DB.counts()).total}`);
   check('Alasannya diterangkan, bukan sekadar gagal diam-diam',
-    !$('#guideAmbigu').hidden && $('#guideAmbigu').textContent.includes('sudah dinilai di Pos'),
-    $('#guideAmbigu').textContent.slice(0, 70));
+    !$('#guideAmbigu').hidden &&
+    $('#guideAmbigu').textContent.includes('baru dinilai di Pos') &&
+    $('#guideAmbigu').textContent.includes('kemungkinan salah pencet') &&
+    $('#guideAmbigu').textContent.includes('pengantaran berikutnya'),
+    $('#guideAmbigu').textContent.slice(0, 80));
+  // Ambang aplikasi harus sama dengan server, kalau tidak staff ditakut-takuti
+  // untuk kiriman yang sebenarnya diterima — atau sebaliknya.
+  check('Di luar jeda, pos yang sama tidak lagi dianggap kembar',
+    (await window.DB.penilaianKembar(gid, POS,
+      new Date(Date.now() + 31 * 60000).toISOString())) === null);
 
   // ...tetapi POS LAIN tetap boleh menilai guide yang sama pada hari yang sama
   click($('#btnNewEval')); await sleep(50);
@@ -738,7 +752,7 @@ check('Pengiriman ulang tidak menggandakan data di server (append-only)', before
     (await window.DB.counts()).total === sesudahSatu + 1,
     `${sesudahSatu} -> ${(await window.DB.counts()).total}`);
 
-  // ...tetapi kehadirannya tetap dihitung satu
+  // ...dan kehadirannya kini dua, karena dua pengantaran
   blobTerakhir.isi = '';
   click($('[data-nav=riwayat]')); await sleep(200);
   click($('#btnExportCsv')); await sleep(400);
@@ -749,11 +763,11 @@ check('Pengiriman ulang tidak menggandakan data di server (append-only)', before
   const barisRinci = csvKembar.slice(batas).split('\r\n')
     .filter(b => b.includes(NAMA) && /^\d{4}-\d{2}-\d{2};/.test(b));
   const kolom = (barisRekap[0] || '').split(';');
-  // Kolom: Tanggal|Nama|guideId|Regu|UNI FORM|ID|ETIKA|KEHADIRAN|Pos|Jml
-  check('Dua pos berbeda pada hari yang sama = KEHADIRAN 2',
-    barisRekap.length === 1 && barisRinci.length === 2 && kolom[7] === '2',
+  // Kolom: Tanggal|Nama|guideId|Regu|UNI FORM|SERAGAM SESUAI|ID|ETIKA|ANTAR|Pos
+  check('Dua pengantaran pada hari yang sama = ANTAR 2',
+    barisRekap.length === 1 && barisRinci.length === 2 && kolom[8] === '2',
     barisRekap[0]
-      ? `kehadiran ${kolom[7]} dari pos "${kolom[8]}", ${barisRinci.length} baris rincian`
+      ? `antar ${kolom[8]} dari pos "${kolom[9]}", ${barisRinci.length} baris rincian`
       : 'baris rekap tidak ketemu');
 }
 
@@ -962,7 +976,7 @@ check('Pengiriman ulang tidak menggandakan data di server (append-only)', before
 /* ---------- Koreksi salah pencet dari aplikasi ---------- */
 {
   const NAMA = 'I Gede Dauh';      // G-006, belum dipakai blok lain
-  const POS = '2';
+  const POS = '3';          // Pos 2 sudah tidak ada: penilaian hanya di Pos 1 & 3
   const isiForm = (idCard, uniform, langkahEtika) => {
     setVal($('#posSelect'), POS);
     $('#posSelect').dispatchEvent(new window.Event('change', { bubbles: true }));
@@ -1031,14 +1045,15 @@ check('Pengiriman ulang tidak menggandakan data di server (append-only)', before
   const lama = semua.find(e => e.evaluationId === asli.evaluationId);
   const baru = semua.find(e => e.koreksiDari === asli.evaluationId);
   check('Koreksi setelah terkirim membuat penilaian pengganti',
-    !!baru && baru.criteria.uniform === false, baru ? 'ada' : 'tidak ada');
+    !!baru && baru.criteria.uniform === -1,
+    baru ? `uniform=${baru.criteria.uniform}` : 'tidak ada');
   check('Penilaian lama ditandai diganti, TIDAK dihapus (append-only)',
     !!lama && lama.diganti === true && lama.digantikanOleh === baru.evaluationId);
   check('Server menerima koreksinya', baru.synced === true, baru.lastError || '');
 
   // Penilaian yang sudah diganti tidak boleh lagi menghalangi maupun ikut rekap
   check('Penilaian yang diganti tidak lagi dianggap kembar',
-    (await window.DB.penilaianKembar('G-006', 2, window.DB.sekarangISO()))
+    (await window.DB.penilaianKembar('G-006', Number(POS), window.DB.sekarangISO()))
       .evaluationId === baru.evaluationId);
   check('Yang sudah diganti tidak punya tombol Perbaiki lagi', await (async () => {
     click($('[data-nav=riwayat]')); await sleep(250);
@@ -1052,7 +1067,7 @@ check('Pengiriman ulang tidak menggandakan data di server (append-only)', before
   const barisRekapDauh = csv.slice(0, batasRinci).split('\r\n')
     .filter(b => b.includes(NAMA) && /^\d{4}-\d{2}-\d{2};/.test(b));
   check('Rekap CSV memakai nilai koreksi, bukan nilai lama',
-    barisRekapDauh.length === 1 && barisRekapDauh[0].split(';')[4] === '0',
+    barisRekapDauh.length === 1 && barisRekapDauh[0].split(';')[4] === '-1',
     barisRekapDauh[0] || 'tidak ketemu');
   check('Penilaian yang dibetulkan tetap tercantum sebagai jejak di CSV',
     csv.includes('PENILAIAN YANG SUDAH DIBETULKAN'));
@@ -1265,6 +1280,46 @@ check('Tidak ada error JavaScript fatal', jsErrors.length === 0, jsErrors.slice(
     (await window.DB.counts()).total === sebelum + 1 && !!simpan
       && simpan.guideName === 'I Wayan Suparta',
     simpan ? `${simpan.guideId} · ${simpan.guideName}` : 'tidak tersimpan');
+}
+
+/* ---------- Uniform tiga tingkat ---------- */
+// Dulu Uniform hanya Ya/Tidak. Sekarang -1 "pakaian tidak sesuai", +1 "pakaian
+// sesuai", +2 "penampilan bagus", dan nilainya ikut dijumlahkan ke nilai total
+// seperti Etika — jadi "bagus" harus benar-benar tersimpan sebagai 2, bukan
+// dipadatkan kembali jadi boolean di suatu tempat sepanjang jalur.
+{
+  const tombol = $$('[data-crit=uniform] .seg').map(b => b.dataset.val);
+  check('Uniform punya tiga tombol: -1, +1, +2', tombol.join(',') === '-1,1,2', tombol.join(','));
+
+  check('Pos 2 tidak lagi ditawarkan — penilaian hanya di Pos 1 dan Pos 3',
+    $$('#posSelect option').map(o => o.value).join(',') === '1,3',
+    $$('#posSelect option').map(o => o.value).join(','));
+
+  check('labelUniform menerjemahkan seluruh tingkat, termasuk data lama',
+    window.App.labelUniform(2) === 'Bagus' && window.App.labelUniform(1) === 'Sesuai' &&
+    window.App.labelUniform(-1) === 'Tidak sesuai' &&
+    window.App.labelUniform(0) === 'Tidak sesuai' &&
+    window.App.labelUniform(true) === 'Sesuai' && window.App.labelUniform(false) === 'Tidak sesuai',
+    `0→${window.App.labelUniform(0)} true→${window.App.labelUniform(true)}`);
+
+  const sebelum = (await window.DB.counts()).total;
+  click($('#btnNewEval')); await sleep(60);
+  setVal($('#posSelect'), '1');
+  setVal($('#guideInput'), 'I Nyoman Nyunyur');
+  await sleep(60);
+  click($('[data-crit=idCard] .seg.yes'));
+  click($('[data-crit=uniform] .seg.plus'));
+  check('Menekan "Bagus" menyimpan angka 2, bukan boolean',
+    window.App.state.form.crit.uniform === 2,
+    JSON.stringify(window.App.state.form.crit.uniform));
+
+  $('#formEval').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await sleep(700);
+  const simpanBagus = (await window.DB.all()).find(e => e.guideName === 'I Nyoman Nyunyur');
+  check('Nilai +2 utuh sampai ke penyimpanan dan terkirim ke server',
+    (await window.DB.counts()).total === sebelum + 1 &&
+    !!simpanBagus && simpanBagus.criteria.uniform === 2 && simpanBagus.synced === true,
+    simpanBagus ? `uniform=${simpanBagus.criteria.uniform} synced=${simpanBagus.synced}` : 'tidak tersimpan');
 }
 
 /* ---------- ringkasan ---------- */

@@ -61,7 +61,6 @@
         <label class="lbl" for="homePos">Pos Pemeriksaan Saat Ini</label>
         <select id="homePos" class="bigselect">
           <option value="1">Pos 1 — Pintu Masuk</option>
-          <option value="2">Pos 2 — Area Tengah</option>
           <option value="3">Pos 3 — Pelataran Utama</option>
         </select>
       </div>
@@ -113,7 +112,6 @@
         <label class="lbl" for="posSelect">1. Pos Pemeriksaan</label>
         <select id="posSelect" class="bigselect" required>
           <option value="1">Pos 1 — Pintu Masuk</option>
-          <option value="2">Pos 2 — Area Tengah</option>
           <option value="3">Pos 3 — Pelataran Utama</option>
         </select>
       </div>
@@ -161,9 +159,10 @@
 
         <div class="criterion" data-crit="uniform">
           <div class="crit-head"><span class="crit-icon">👔</span><span class="crit-name">Uniform</span></div>
-          <div class="segmented" role="group" aria-label="Penilaian Uniform">
-            <button type="button" class="seg yes" data-val="1">Ya</button>
-            <button type="button" class="seg no"  data-val="0">Tidak</button>
+          <div class="segmented tiga" role="group" aria-label="Penilaian Uniform">
+            <button type="button" class="seg no"  data-val="-1">Tidak sesuai</button>
+            <button type="button" class="seg yes" data-val="1">Sesuai</button>
+            <button type="button" class="seg plus" data-val="2">Bagus</button>
           </div>
         </div>
 

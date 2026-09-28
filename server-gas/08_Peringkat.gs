@@ -5,7 +5,7 @@
  * ============================================================
  *
  *  TUGAS    : Hitung nilai per guide, urutkan, tulis tabel peringkat di tab Dasbor.
- *  LARANGAN : Syarat MIN_HARI_PERINGKAT ditegakkan di sini; yang di bawah batas
+ *  LARANGAN : Syarat MIN_PENGANTARAN_PERINGKAT ditegakkan di sini; yang di bawah batas
  *          TIDAK dibuang, hanya dipindah ke tabel "belum cukup hari".
  *
  *  Seluruh berkas .gs berbagi SATU lingkup global — tidak ada import/export.
@@ -23,10 +23,12 @@
  * tab rekap regu, supaya angka di dasbor bisa langsung dicocokkan ke sana.
  *
  * Dua ukuran dilaporkan berdampingan dan itu disengaja:
- *   - jumlah    : untuk reward berbasis akumulasi
+ *   - jumlah    : untuk menelusuri angkanya ke tab rekap
  *   - rata-rata : untuk membandingkan antar guide secara adil
- * Guide yang hadir 20 hari akan selalu mengalahkan yang hadir 3 hari pada
- * jumlah mentah, jadi pengurutan peringkat memakai rata-rata.
+ *
+ * Pembaginya PENGANTARAN, bukan hari. Banyaknya pengantaran ditentukan urutan
+ * giliran, bukan kualitas guide-nya, jadi reward yang disandarkan pada jumlah
+ * akan memihak guide yang kebagian giliran lebih banyak.
  *
  * @return array objek per guide (hanya guide aktif yang punya data)
  */
@@ -35,15 +37,22 @@ function peringkatGuide_(ringkasan, guides, reviewPeta) {
   for (var i = 0; i < guides.length; i++) {
     var g = guides[i];
     var harian = ringkasan.harian[g.guideId] || {};
-    var hari = 0, sU = 0, sID = 0, sEtika = 0, sReview = 0, hariReview = 0;
+    var hari = 0, antar = 0, sU = 0, sUPatuh = 0, sID = 0, sEtika = 0;
+    var sReview = 0, hariReview = 0;
 
     // Tanggal yang punya penilaian
     for (var tgl in harian) {
       var sel = harian[tgl];
+      // REVIEW diketik tim per HARI di tab rekap, bukan per pengantaran, jadi
+      // granularitasnya memang berbeda dari kriteria lain. Dibiarkan begitu:
+      // satu-satunya sumbernya ketikan manual, dan memecahnya per pengantaran
+      // berarti mengarang angka yang tidak pernah diisi siapa pun.
       var rvw = reviewPeta[g.guideName + '|' + tgl];
       if (rvw === undefined) rvw = sel.review || 0;
       hari++;
+      antar += sel.antar;
       sU += sel.uniform;
+      sUPatuh += sel.uniformPatuh;
       sID += sel.idCard;
       sEtika += sel.etika || 0;
       sReview += rvw;
@@ -72,16 +81,25 @@ function peringkatGuide_(ringkasan, guides, reviewPeta) {
       regu: g.regu.join(', '),
       kategori: g.kategori,
       hari: hari,
+      antar: antar,
       uniform: sU,
+      // Cacah pengantaran yang berpakaian sesuai — dipakai kolom persen, yang
+      // tidak boleh memakai jumlah nilai karena skalanya -1..+2.
+      uniformPatuh: sUPatuh,
       idCard: sID,
       etika: sEtika,
       review: sReview,
       hariReview: hariReview,
       total: total,
-      rataTotal: hari ? total / hari : 0,
-      // Ketaatan = berapa persen dari kesempatan (2 kriteria x hari) yang lulus
-      taat: hari ? (sU + sID) / (2 * hari) : 0,
-      rataEtika: hari ? sEtika / hari : 0
+      rataTotal: antar ? total / antar : 0,
+      // Ketaatan memakai CACAH yang patuh, bukan jumlah nilainya: Uniform kini
+      // bernilai -1/+1/+2, sehingga menjumlahkannya lalu membagi 2 kesempatan
+      // akan menghasilkan persentase di luar 0..100%.
+      taat: antar ? (sUPatuh + sID) / (2 * antar) : 0,
+      // Mutu berpakaian pada skalanya sendiri (-1..+2) — inilah yang membedakan
+      // "pakaian sesuai" dari "penampilan bagus", yang hilang di kolom persen.
+      rataUniform: antar ? sU / antar : 0,
+      rataEtika: antar ? sEtika / antar : 0
     });
   }
   return out;
@@ -93,10 +111,10 @@ function ambilPeringkat_(daftar, kunci, naik, jml) {
   var salinan = daftar.slice();
   salinan.sort(function (a, b) {
     var beda = naik ? a[kunci] - b[kunci] : b[kunci] - a[kunci];
-    // Hari hadir lebih banyak dimenangkan saat nilainya sama: peringkat yang
+    // Pengantaran lebih banyak dimenangkan saat nilainya sama: peringkat yang
     // disandarkan pada rata-rata harus mengutamakan bukti yang lebih banyak.
     if (beda) return beda;
-    if (a.hari !== b.hari) return b.hari - a.hari;
+    if (a.antar !== b.antar) return b.antar - a.antar;
     return a.nama.toLowerCase() < b.nama.toLowerCase() ? -1 : 1;
   });
   return salinan.slice(0, jml);
@@ -118,7 +136,7 @@ function tulisJudulBagian_(sh, baris, kol, teks) {
  */
 function tulisTabelPeringkat_(sh, baris, kolAwal, tabel) {
   var ukuranLabel = {
-    total:  'Rata-rata/hari',
+    total:  'Rata-rata/antar',
     taat:   '% Taat',
     etika:  'Rata-rata Etika',
     review: 'Jumlah Review'
@@ -126,7 +144,7 @@ function tulisTabelPeringkat_(sh, baris, kolAwal, tabel) {
   sh.getRange(baris, kolAwal).setValue(tabel.judul);
   sh.getRange(baris, kolAwal, 1, 7).setFontWeight('bold').setBackground('#EEF2F7');
 
-  var kepala = ['#', 'Nama Guide', 'Regu', 'Hari', 'Jumlah Nilai',
+  var kepala = ['#', 'Nama Guide', 'Regu', 'Antar', 'Jumlah Nilai',
                 ukuranLabel[tabel.ukuran], 'Rincian'];
   sh.getRange(baris + 1, kolAwal, 1, 7).setValues([kepala])
     .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#4A6B58');
@@ -142,7 +160,10 @@ function tulisTabelPeringkat_(sh, baris, kolAwal, tabel) {
     var ukuran, rincian;
     if (tabel.ukuran === 'taat') {
       ukuran = x.taat;
-      rincian = 'Uniform ' + x.uniform + '/' + x.hari + ' · ID ' + x.idCard + '/' + x.hari;
+      // Uniform tidak lagi bisa ditulis "sekian dari sekian": nilainya -1/+1/+2,
+      // jadi mutunya dilaporkan sebagai rata-rata, sementara ID tetap cacah.
+      rincian = 'Mutu uniform ' + (Math.round(x.rataUniform * 100) / 100) +
+                ' · ID ' + x.idCard + '/' + x.antar;
     } else if (tabel.ukuran === 'etika') {
       ukuran = Math.round(x.rataEtika * 100) / 100;
       rincian = 'Total etika ' + x.etika;
@@ -153,7 +174,7 @@ function tulisTabelPeringkat_(sh, baris, kolAwal, tabel) {
       ukuran = Math.round(x.rataTotal * 100) / 100;
       rincian = 'U ' + x.uniform + ' · ID ' + x.idCard + ' · Etika ' + x.etika + ' · Review ' + x.review;
     }
-    isi.push([i + 1, x.nama, x.regu, x.hari, x.total, ukuran, rincian]);
+    isi.push([i + 1, x.nama, x.regu, x.antar, x.total, ukuran, rincian]);
   }
   sh.getRange(baris + 2, kolAwal, isi.length, 7).setValues(isi);
   if (tabel.ukuran === 'taat') {

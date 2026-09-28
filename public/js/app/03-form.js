@@ -13,7 +13,8 @@
   'use strict';
 
   const App = window.App;
-  const { $, $$, uuid, fmtTime, esc, ETIKA_MIN, ETIKA_MAKS, KRIT_ANGKA } = App;
+  const { $, $$, uuid, fmtTime, esc, ETIKA_MIN, ETIKA_MAKS, KRIT_ANGKA,
+          nilaiUniform, labelUniform } = App;
 
   App.resetForm = function resetForm(keepPos = true) {
     const pos = keepPos ? App.state.form.pos : 1;
@@ -100,8 +101,9 @@
     catch { return; }
     // Guide sudah diganti selagi menunggu — jangan timpa keterangannya
     if (!kembar || el.dataset.guideId !== g.guideId) return;
-    el.innerHTML += `<br><small>🚫 Sudah dinilai di Pos ${pos} hari ini — ` +
-                    `tidak bisa dinilai lagi di pos ini. Pos lain masih bisa.</small>`;
+    el.innerHTML += `<br><small>🚫 Baru dinilai di Pos ${pos} pukul ` +
+                    `${esc(fmtTime(kembar.timestamp).split(' ').pop())} — terlalu dekat. ` +
+                    `Tunggu jedanya habis, atau betulkan penilaian itu.</small>`;
   }
 
   /** Tawarkan nama-nama yang mungkin dimaksud saat ketikan masih ambigu. */
@@ -150,15 +152,16 @@
     const kembar = App.state.koreksi ? null : await DB.penilaianKembar(g.guideId, pos, DB.sekarangISO());
     if (kembar) {
       const c = kembar.criteria || {};
-      App.toast(`${g.guideName} sudah dinilai di Pos ${pos} hari ini`, 'warn', '🚫');
+      App.toast(`${g.guideName} baru saja dinilai di Pos ${pos}`, 'warn', '🚫');
       const el = $('#guideAmbigu');
       if (el) {
         el.innerHTML =
-          `🚫 <strong>${esc(g.guideName)}</strong> sudah dinilai di Pos ${pos} ` +
+          `🚫 <strong>${esc(g.guideName)}</strong> baru dinilai di Pos ${pos} ` +
           `pukul ${esc(fmtTime(kembar.timestamp).split(' ').pop())} — ` +
-          `Uniform ${c.uniform ? 'Ya' : 'Tidak'}, ID ${c.idCard ? 'Ya' : 'Tidak'}, ` +
+          `Uniform ${labelUniform(c.uniform)}, ID ${c.idCard ? 'Ya' : 'Tidak'}, ` +
           `Etika ${App.nilaiEtika(c.etika)}.<br>` +
-          `Satu pos menilai satu kali sehari. Guide ini masih bisa dinilai di pos lain.` +
+          `Jaraknya terlalu dekat, jadi ini kemungkinan salah pencet. Kalau memang ` +
+          `pengantaran berikutnya, tunggu jedanya habis. Pos lain tetap bisa sekarang.` +
           `<br><button type="button" class="chip retrybtn" data-fix="${esc(kembar.evaluationId)}">` +
           `✏️ Betulkan penilaian itu</button>`;
         el.hidden = false;
@@ -179,7 +182,7 @@
       timestamp: App.state.koreksi ? App.state.koreksi.timestamp : DB.sekarangISO(),
       criteria: {
         idCard: !!App.state.form.crit.idCard,
-        uniform: !!App.state.form.crit.uniform,
+        uniform: nilaiUniform(App.state.form.crit.uniform),
         etika: Math.min(ETIKA_MAKS, Math.max(ETIKA_MIN, Number(App.state.form.crit.etika) || 0)),
       },
       catatan: $('#catatan').value.trim(),

@@ -179,6 +179,11 @@
   const wrap = req => { const o = { __req: req }; return o; };
 
   /* ---------------------- API publik ---------------------- */
+  // Harus SAMA dengan JEDA_PENILAIAN_MENIT di server (00_Konstanta.gs).
+  // Kalau aplikasi lebih longgar, staff baru tahu kirimannya ditolak setelah
+  // formulir terlanjur diisi; kalau lebih ketat, ia menahan penilaian yang sah.
+  const JEDA_PENILAIAN_MENIT = 30;
+
   const DB = {
     STORAGE_LIMIT_BYTES,
     MAKS_TOLAKAN,
@@ -310,8 +315,20 @@
      * di pos yang sama umumnya berasal dari perangkat yang sama juga; server
      * sengaja tidak menyediakan cara membaca kembali daftar penilaian.
      */
+    /**
+     * Penilaian atas guide & pos yang sama yang jaraknya lebih dekat dari jeda
+     * minimum server.
+     *
+     * Dulu pemeriksaannya "sudah dinilai hari ini?", karena satu pos hanya
+     * boleh menilai sekali sehari. Sejak penilaian dihitung per pengantaran,
+     * guide yang sama boleh dinilai berkali-kali sehari di pos yang sama —
+     * yang tersisa hanya pengaman salah pencet, dan batasnya harus sama persis
+     * dengan yang ditegakkan server, kalau tidak aplikasi menakut-nakuti staff
+     * untuk kiriman yang sebenarnya akan diterima.
+     */
     async penilaianKembar(guideId, pos, iso) {
-      const hari = DB.tanggalLokal(iso);
+      const batas = JEDA_PENILAIAN_MENIT * 60000;
+      const ms = new Date(iso).getTime();
       return (await DB.all()).find(e =>
         !e.corrupt &&
         // Yang sudah dibetulkan tidak lagi menghalangi: penilaian penggantinya
@@ -325,7 +342,8 @@
         !e.buntu &&
         e.guideId === guideId &&
         Number(e.pos) === Number(pos) &&
-        DB.tanggalLokal(e.timestamp) === hari) || null;
+        // Selisih MUTLAK: entri offline bisa bercap waktu lebih awal.
+        Math.abs(new Date(e.timestamp).getTime() - ms) < batas) || null;
     },
 
     /**

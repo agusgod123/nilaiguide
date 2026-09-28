@@ -148,8 +148,13 @@ function validateEvaluation(e) {
   const c = e.criteria;
   if (!c || typeof c !== 'object') errors.push('criteria wajib');
   else {
-    for (const k of ['idCard', 'uniform']) {
-      if (typeof c[k] !== 'boolean') errors.push(`criteria.${k} harus boolean`);
+    if (typeof c.idCard !== 'boolean') errors.push('criteria.idCard harus boolean');
+    // UNIFORM kini tiga tingkat (-1 / +1 / +2). Boolean tetap diterima supaya
+    // perangkat yang belum diperbarui tidak ditolak permanen: true = +1, false = -1.
+    if (typeof c.uniform !== 'boolean' &&
+        !(typeof c.uniform === 'number' && store.UNIFORM_NILAI.includes(c.uniform))) {
+      errors.push('criteria.uniform harus boolean (aplikasi lama) atau salah satu dari ' +
+                  store.UNIFORM_NILAI.join(', '));
     }
     // Etika berupa angka -5..+5 (0 = biasa saja), bukan ya/tidak.
     // Boleh tidak dikirim (dianggap 0) supaya perangkat berversi lama tidak
@@ -178,7 +183,7 @@ function toCsv(rows) {
   for (const r of rows) {
     lines.push([
       r.evaluationId, r.timestamp, r.pos, r.guideId, r.guideName,
-      r.criteria.uniform ? 1 : 0,
+      store.normalUniform(r.criteria.uniform),
       r.criteria.idCard ? 1 : 0,
       Number(r.criteria.review) || 0,
       Number(r.criteria.etika) || 0,

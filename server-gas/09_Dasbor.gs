@@ -28,21 +28,27 @@
  * @param {Object} infoRegu   kode regu -> hasil bangunRekapRegu_
  * @param {Array}  kodeRegu   mis. ['A1','A2']
  * @param {string} tgl        'yyyy-mm-dd'
- * @param {number} offset     0=UNI FORM, 1=ID, 2=REVIEW, 3=ETIKA
+ * @param {number} offset     0=UNI FORM, 1=ID, 2=REVIEW, 3=ETIKA, 4=ANTAR, 5=PATUH
  * @param {string} fungsi     'SUM' atau 'COUNT'
  */
 function rumusKategori_(infoRegu, kodeRegu, tgl, offset, fungsi) {
+  return '=' + ekspresiKategori_(infoRegu, kodeRegu, tgl, offset, fungsi);
+}
+
+
+/** Sama, tanpa '=' di depan — supaya bisa disisipkan ke dalam rumus lain. */
+function ekspresiKategori_(infoRegu, kodeRegu, tgl, offset, fungsi) {
   var bagian = [];
   for (var i = 0; i < kodeRegu.length; i++) {
     var info = infoRegu[kodeRegu[i]];
     if (!info || !info.anggota) continue;
     var idx = info.tanggalList.indexOf(tgl);
     if (idx === -1) continue;                        // tab ini tidak punya tanggal itu
-    var kol = kolomHuruf_(2 + idx * 4 + offset);
+    var kol = kolomHuruf_(2 + idx * 6 + offset);     // blok tanggal 6 kolom
     bagian.push(fungsi + "('" + info.namaTab + "'!" +
                 kol + info.barisAwal + ':' + kol + info.barisAkhir + ')');
   }
-  return bagian.length ? '=' + bagian.join('+') : '=0';
+  return bagian.length ? bagian.join('+') : '0';
 }
 
 
@@ -62,7 +68,8 @@ function bangunDasbor_(bulan, ringkasan, guides, infoRegu) {
     for (var c = 0; c < lama.length; c++) sh.removeChart(lama[c]);
   } catch (e) { Logger.log('Grafik lama tidak dapat dibuang: ' + e); }
 
-  var KOL = 18;
+  var LEBAR_KAT = 10;                 // kolom per kategori
+  var KOL = 2 + LEBAR_KAT * 2 + 2;    // Tanggal, Hari, 2 kategori, GABUNGAN
   var ASING = ['A1', 'A2'], DOMESTIK = ['D1', 'D2'];
 
   /* ---------- baris 1: judul ---------- */
@@ -83,17 +90,23 @@ function bangunDasbor_(bulan, ringkasan, guides, infoRegu) {
 
   /* ---------- baris 3: kepala kelompok ---------- */
   sh.getRange(3, 1).setValue('');
-  sh.getRange(3, 3, 1, 7).merge().setValue('ASING (A1 + A2)')
+  sh.getRange(3, 3, 1, LEBAR_KAT).merge().setValue('ASING (A1 + A2)')
     .setHorizontalAlignment('center').setFontWeight('bold').setBackground('#E7F3EC');
-  sh.getRange(3, 10, 1, 7).merge().setValue('DOMESTIK (D1 + D2)')
+  sh.getRange(3, 3 + LEBAR_KAT, 1, LEBAR_KAT).merge().setValue('DOMESTIK (D1 + D2)')
     .setHorizontalAlignment('center').setFontWeight('bold').setBackground('#FFF6E0');
-  sh.getRange(3, 17, 1, 2).merge().setValue('GABUNGAN')
+  sh.getRange(3, 3 + LEBAR_KAT * 2, 1, 2).merge().setValue('GABUNGAN')
     .setHorizontalAlignment('center').setFontWeight('bold').setBackground('#EEF2F7');
 
   /* ---------- baris 4: kepala kolom ---------- */
   var kepala = ['Tanggal', 'Hari'];
+  // Hadir  = berapa GUIDE berbeda yang dinilai hari itu
+  // Antar  = berapa PENGANTARAN — inilah penyebut semua rata-rata di baris ini
+  // Patuh  = berapa pengantaran yang berpakaian sesuai (nilai >= +1)
+  // Mutu Uni = rata-rata nilai Uniform pada skalanya sendiri (-1..+2); kolom
+  //            persen tidak bisa membedakan "sesuai" dari "penampilan bagus"
   for (var k = 0; k < 2; k++) {
-    kepala.push('Hadir', 'Uniform', 'ID', '% Uniform', '% ID', 'Etika', 'Review');
+    kepala.push('Hadir', 'Antar', 'Uniform', 'ID', 'Patuh',
+                '% Uniform', '% ID', 'Mutu Uni', 'Etika', 'Review');
   }
   kepala.push('% Uniform', '% ID');
   sh.getRange(4, 1, 1, KOL).setValues([kepala])
@@ -120,22 +133,32 @@ function bangunDasbor_(bulan, ringkasan, guides, infoRegu) {
       var blok = [ASING, DOMESTIK];
       for (var kb = 0; kb < 2; kb++) {
         var kodeRegu = blok[kb];
-        var kolHadir = kolomHuruf_(3 + kb * 7) + nb;
-        var kolUni   = kolomHuruf_(4 + kb * 7) + nb;
-        var kolId    = kolomHuruf_(5 + kb * 7) + nb;
-        satu.push(rumusKategori_(infoRegu, kodeRegu, t, 0, 'COUNT'));   // Hadir
+        var pangkal  = 3 + kb * LEBAR_KAT;
+        var kolAntar = kolomHuruf_(pangkal + 1) + nb;
+        var kolUni   = kolomHuruf_(pangkal + 2) + nb;
+        var kolId    = kolomHuruf_(pangkal + 3) + nb;
+        var kolPatuh = kolomHuruf_(pangkal + 4) + nb;
+        satu.push(rumusKategori_(infoRegu, kodeRegu, t, 0, 'COUNT'));   // Hadir (guide)
+        satu.push(rumusKategori_(infoRegu, kodeRegu, t, 4, 'SUM'));     // Antar
         satu.push(rumusKategori_(infoRegu, kodeRegu, t, 0, 'SUM'));     // Uniform
         satu.push(rumusKategori_(infoRegu, kodeRegu, t, 1, 'SUM'));     // ID
-        satu.push('=IF(' + kolHadir + '=0,"",' + kolUni + '/' + kolHadir + ')');
-        satu.push('=IF(' + kolHadir + '=0,"",' + kolId + '/' + kolHadir + ')');
+        satu.push(rumusKategori_(infoRegu, kodeRegu, t, 5, 'SUM'));     // Patuh
+        // Penyebutnya PENGANTARAN, bukan jumlah guide: satu guide bisa
+        // mengantar berkali-kali sehari, dan tiap pengantaran dinilai sendiri.
+        satu.push('=IF(' + kolAntar + '=0,"",' + kolPatuh + '/' + kolAntar + ')');
+        satu.push('=IF(' + kolAntar + '=0,"",' + kolId + '/' + kolAntar + ')');
+        satu.push('=IF(' + kolAntar + '=0,"",' + kolUni + '/' + kolAntar + ')');
         satu.push(rumusKategori_(infoRegu, kodeRegu, t, 3, 'SUM'));     // Etika
         satu.push(rumusKategori_(infoRegu, kodeRegu, t, 2, 'SUM'));     // Review
       }
       // Gabungan: dipakai grafik. Guide yang merangkap terhitung dua kali di
       // pembilang DAN penyebut, jadi persentasenya nyaris tidak bergeser.
-      var hd = 'C' + nb + '+J' + nb;
-      satu.push('=IF(' + hd + '=0,"",(D' + nb + '+K' + nb + ')/(' + hd + '))');
-      satu.push('=IF(' + hd + '=0,"",(E' + nb + '+L' + nb + ')/(' + hd + '))');
+      var aA = kolomHuruf_(4) + nb, aD = kolomHuruf_(4 + LEBAR_KAT) + nb;
+      var pA = kolomHuruf_(7) + nb, pD = kolomHuruf_(7 + LEBAR_KAT) + nb;
+      var iA = kolomHuruf_(6) + nb, iD = kolomHuruf_(6 + LEBAR_KAT) + nb;
+      var an = aA + '+' + aD;
+      satu.push('=IF(' + an + '=0,"",(' + pA + '+' + pD + ')/(' + an + '))');
+      satu.push('=IF(' + an + '=0,"",(' + iA + '+' + iD + ')/(' + an + '))');
       rumus.push(satu);
     }
     sh.getRange(b0, 3, rumus.length, KOL - 2).setFormulas(rumus);
@@ -144,28 +167,39 @@ function bangunDasbor_(bulan, ringkasan, guides, infoRegu) {
     var bTotal = bAkhir + 1;
     sh.getRange(bTotal, 1, 1, 2).setValues([['TOTAL', 'sebulan']]);
     var totalRumus = [];
+    var jum = function (kol) { return '=SUM(' + kol + b0 + ':' + kol + bAkhir + ')'; };
     for (var kb2 = 0; kb2 < 2; kb2++) {
-      var oh = kolomHuruf_(3 + kb2 * 7), ou = kolomHuruf_(4 + kb2 * 7);
-      var oi = kolomHuruf_(5 + kb2 * 7), oe = kolomHuruf_(8 + kb2 * 7);
-      var orv = kolomHuruf_(9 + kb2 * 7);
-      var selH = oh + bTotal;
-      totalRumus.push('=SUM(' + oh + b0 + ':' + oh + bAkhir + ')');
-      totalRumus.push('=SUM(' + ou + b0 + ':' + ou + bAkhir + ')');
-      totalRumus.push('=SUM(' + oi + b0 + ':' + oi + bAkhir + ')');
-      totalRumus.push('=IF(' + selH + '=0,"",' + ou + bTotal + '/' + selH + ')');
-      totalRumus.push('=IF(' + selH + '=0,"",' + oi + bTotal + '/' + selH + ')');
-      totalRumus.push('=SUM(' + oe + b0 + ':' + oe + bAkhir + ')');
-      totalRumus.push('=SUM(' + orv + b0 + ':' + orv + bAkhir + ')');
+      var pk = 3 + kb2 * LEBAR_KAT;
+      var oh = kolomHuruf_(pk), oa = kolomHuruf_(pk + 1), ou = kolomHuruf_(pk + 2);
+      var oi = kolomHuruf_(pk + 3), op = kolomHuruf_(pk + 4);
+      var oe = kolomHuruf_(pk + 8), orv = kolomHuruf_(pk + 9);
+      var selA = oa + bTotal;
+      totalRumus.push(jum(oh));   // Hadir: guide-hari, bukan guide berbeda
+      totalRumus.push(jum(oa));
+      totalRumus.push(jum(ou));
+      totalRumus.push(jum(oi));
+      totalRumus.push(jum(op));
+      totalRumus.push('=IF(' + selA + '=0,"",' + op + bTotal + '/' + selA + ')');
+      totalRumus.push('=IF(' + selA + '=0,"",' + oi + bTotal + '/' + selA + ')');
+      totalRumus.push('=IF(' + selA + '=0,"",' + ou + bTotal + '/' + selA + ')');
+      totalRumus.push(jum(oe));
+      totalRumus.push(jum(orv));
     }
-    var hdT = 'C' + bTotal + '+J' + bTotal;
-    totalRumus.push('=IF(' + hdT + '=0,"",(D' + bTotal + '+K' + bTotal + ')/(' + hdT + '))');
-    totalRumus.push('=IF(' + hdT + '=0,"",(E' + bTotal + '+L' + bTotal + ')/(' + hdT + '))');
+    var anT = kolomHuruf_(4) + bTotal + '+' + kolomHuruf_(4 + LEBAR_KAT) + bTotal;
+    var pT = kolomHuruf_(7) + bTotal + '+' + kolomHuruf_(7 + LEBAR_KAT) + bTotal;
+    var iT = kolomHuruf_(6) + bTotal + '+' + kolomHuruf_(6 + LEBAR_KAT) + bTotal;
+    totalRumus.push('=IF(' + anT + '=0,"",(' + pT + ')/(' + anT + '))');
+    totalRumus.push('=IF(' + anT + '=0,"",(' + iT + ')/(' + anT + '))');
     sh.getRange(bTotal, 3, 1, KOL - 2).setFormulas([totalRumus]);
     sh.getRange(bTotal, 1, 1, KOL).setFontWeight('bold').setBackground('#FFF6E0');
 
     // Persen ditampilkan sebagai persen, bukan 0,9333333
-    [6, 7, 13, 14, 17, 18].forEach(function (kol) {
+    [8, 9, 18, 19, 23, 24].forEach(function (kol) {
       sh.getRange(b0, kol, tanggal.length + 1, 1).setNumberFormat('0%');
+    });
+    // Mutu Uniform bukan persen — skalanya -1..+2.
+    [10, 20].forEach(function (kol) {
+      sh.getRange(b0, kol, tanggal.length + 1, 1).setNumberFormat('0.00');
     });
   } else {
     sh.getRange(b0, 1).setValue('Belum ada penilaian pada bulan ini.');
@@ -180,12 +214,13 @@ function bangunDasbor_(bulan, ringkasan, guides, infoRegu) {
   /* ---------- tabel peringkat ---------- */
   var reviewPeta = kumpulkanReviewManual_(bulan);
   var daftar = peringkatGuide_(ringkasan, guides, reviewPeta);
-  var cukup = daftar.filter(function (x) { return x.hari >= MIN_HARI_PERINGKAT; });
-  var kurang = daftar.filter(function (x) { return x.hari < MIN_HARI_PERINGKAT; });
+  var cukup = daftar.filter(function (x) { return x.antar >= MIN_PENGANTARAN_PERINGKAT; });
+  var kurang = daftar.filter(function (x) { return x.antar < MIN_PENGANTARAN_PERINGKAT; });
 
   var baris = barisGrafik;
   baris = tulisJudulBagian_(sh, baris, KOL,
-    'PERINGKAT — diurut memakai RATA-RATA, minimal hadir ' + MIN_HARI_PERINGKAT + ' hari (' +
+    'PERINGKAT — diurut memakai RATA-RATA PER PENGANTARAN, minimal ' +
+    MIN_PENGANTARAN_PERINGKAT + ' pengantaran (' +
     cukup.length + ' guide memenuhi, ' + kurang.length + ' belum)');
 
   var pasangan = [
@@ -198,8 +233,8 @@ function bangunDasbor_(bulan, ringkasan, guides, infoRegu) {
     [{ judul: '⭐ MENERIMA REVIEW PALING BANYAK',
        data: ambilPeringkat_(daftar.filter(function (x) { return x.review > 0; }), 'review', false, JML_PERINGKAT),
        ukuran: 'review' },
-     { judul: 'BELUM CUKUP HARI (< ' + MIN_HARI_PERINGKAT + ' hari, tidak diperingkat)',
-       data: ambilPeringkat_(kurang, 'hari', false, JML_PERINGKAT), ukuran: 'total' }]
+     { judul: 'BELUM CUKUP PENGANTARAN (< ' + MIN_PENGANTARAN_PERINGKAT + ', tidak diperingkat)',
+       data: ambilPeringkat_(kurang, 'antar', false, JML_PERINGKAT), ukuran: 'total' }]
   ];
 
   for (var pi = 0; pi < pasangan.length; pi++) {
@@ -238,7 +273,7 @@ function pasangGrafikKetaatan_(sh, b0, bAkhir, barisAnchor) {
     var grafik = sh.newChart()
       .setChartType(Charts.ChartType.LINE)
       .addRange(sh.getRange(b0, 1, bAkhir - b0 + 1, 1))     // tanggal
-      .addRange(sh.getRange(b0, 17, bAkhir - b0 + 1, 2))    // % Uniform, % ID gabungan
+      .addRange(sh.getRange(b0, 23, bAkhir - b0 + 1, 2))    // % Uniform, % ID gabungan
       .setNumHeaders(0)
       .setPosition(barisAnchor, 1, 0, 0)
       .setOption('title', 'Ketaatan harian — % Uniform sesuai vs % ID-Card sesuai')

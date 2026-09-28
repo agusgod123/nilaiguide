@@ -71,7 +71,7 @@ const LAP_TOP_N = 10;
 
 /**
  * Dasar pengurutan tabel "nilai total".
- *   'rata'   — rata-rata nilai per hari hadir (sama seperti tab Dasbor sekarang)
+ *   'rata'   — rata-rata nilai per pengantaran (sama seperti tab Dasbor sekarang)
  *   'jumlah' — jumlah nilai sebulan (sesuai kata "jumlah nilai" di permintaan awal)
  *
  * Ini keputusan yang masih menggantung di §4 dokumen konteks. Sengaja dibuat
@@ -121,7 +121,7 @@ const LAP_KOL_DASBOR = {
 /**
  * Nama medan yang dicari pada hasil peringkatGuide_().
  *
- * Sudah dicocokkan dengan 08_Peringkat.gs: nama, regu, hari, uniform, idCard,
+ * Sudah dicocokkan dengan 08_Peringkat.gs: nama, regu, antar, uniform, idCard,
  * etika, review, total. Daftar alias di bawah hanya jaring pengaman kalau
  * salah satunya kelak berganti nama — cukup tambahkan namanya di sini,
  * TIDAK perlu menyentuh bagian lain berkas ini.
@@ -133,8 +133,12 @@ const LAP_KOL_DASBOR = {
 const LAP_PETA = {
   nama   : ['nama', 'namaGuide', 'name', 'guide'],
   regu   : ['regu', 'reguList', 'reguTeks', 'regus'],
-  hari   : ['hari', 'hariHadir', 'jmlHari', 'hadir'],
+  // Satuannya PENGANTARAN, bukan hari: satu guide bisa mengantar berkali-kali
+  // sehari dan tiap pengantaran dinilai sendiri. 'hari' tetap didaftar sebagai
+  // jaring pengaman untuk data lama.
+  hari   : ['antar', 'pengantaran', 'hari', 'hariHadir', 'jmlHari', 'hadir'],
   uniform: ['uniform', 'jmlUniform', 'totalUniform', 'seragam'],
+  patuh  : ['uniformPatuh', 'patuh', 'seragamSesuai'],
   idcard : ['idCard', 'idcard', 'kartu', 'jmlId', 'totalId'],
   etika  : ['etika', 'jmlEtika', 'totalEtika'],
   review : ['review', 'jmlReview', 'totalReview'],
@@ -199,7 +203,7 @@ function lapBulanTeks_(bulan) {
 
 /** Batas minimal hari untuk masuk peringkat. */
 function lapMinHari_() {
-  return (typeof MIN_HARI_PERINGKAT === 'number') ? MIN_HARI_PERINGKAT : 3;
+  return (typeof MIN_PENGANTARAN_PERINGKAT === 'number') ? MIN_PENGANTARAN_PERINGKAT : 3;
 }
 
 /** Pembagian yang aman dari nol. */
@@ -301,6 +305,7 @@ function lapAmbilGuide_(bulan) {
     const regu    = lapMedanTeks_(g, LAP_PETA.regu);
     const hari    = lapMedanAngka_(g, LAP_PETA.hari);
     const uniform = lapMedanAngka_(g, LAP_PETA.uniform);
+    const patuh   = lapMedanAngka_(g, LAP_PETA.patuh);
     const idcard  = lapMedanAngka_(g, LAP_PETA.idcard);
     const etika   = lapMedanAngka_(g, LAP_PETA.etika);
     const review  = lapMedanAngka_(g, LAP_PETA.review);
@@ -308,6 +313,10 @@ function lapAmbilGuide_(bulan) {
 
     const nH = hari ? hari.nilai : 0;
     const nU = uniform ? uniform.nilai : 0;
+    // Kalau cacah patuh tidak tersedia (data lama), setiap nilai >= ambang
+    // dianggap satu pengantaran patuh — itu yang bisa disimpulkan tanpa
+    // mengarang: jumlah nilai saja tidak bisa dibalik jadi cacah.
+    const nP = patuh ? patuh.nilai : 0;
     const nI = idcard  ? idcard.nilai  : 0;
     const nE = etika   ? etika.nilai   : 0;
     const nR = review  ? review.nilai  : 0;
@@ -321,6 +330,7 @@ function lapAmbilGuide_(bulan) {
       kategori : g.kategori || '',
       hari     : nH,
       uniform  : nU,
+      patuh    : nP,
       idcard   : nI,
       etika    : nE,
       review   : nR,
@@ -329,7 +339,9 @@ function lapAmbilGuide_(bulan) {
       // Rata-rata & ketaatan diambil apa adanya dari 08_Peringkat.gs bila ada,
       // supaya laporan tidak pernah berselisih dengan dasbor.
       rataTotal: (typeof g.rataTotal === 'number') ? g.rataTotal : lapBagi_(nT, nH),
-      taat     : (typeof g.taat === 'number') ? g.taat : lapBagi_(nU + nI, 2 * nH),
+      // Ketaatan memakai CACAH patuh, bukan jumlah nilai Uniform: pada skala
+      // -1/+1/+2 penjumlahan bisa melampaui atau turun di bawah rentang 0..100%.
+      taat     : (typeof g.taat === 'number') ? g.taat : lapBagi_(nP + nI, 2 * nH),
       rataEtika: (typeof g.rataEtika === 'number') ? g.rataEtika : lapBagi_(nE, nH)
     };
   }
@@ -416,19 +428,24 @@ function lapAmbilHarian_(bulan) {
 
 /** Menjumlahkan sekelompok guide jadi satu baris ringkasan. */
 function lapJumlahkan_(daftar) {
-  const j = { guide: daftar.length, hari: 0, uniform: 0, idcard: 0, etika: 0, review: 0, total: 0 };
+  const j = { guide: daftar.length, hari: 0, uniform: 0, patuh: 0, idcard: 0,
+              etika: 0, review: 0, total: 0 };
   daftar.forEach(function (g) {
     j.hari    += g.hari;
     j.uniform += g.uniform;
+    j.patuh   += g.patuh;
     j.idcard  += g.idcard;
     j.etika   += g.etika;
     j.review  += g.review;
     j.total   += g.total;
   });
-  // Ketaatan berpakaian & ID = (Uniform + ID) ÷ (2 × hari hadir)   — aturan §2
-  j.taat = lapBagi_(j.uniform + j.idcard, 2 * j.hari);
-  j.pU   = lapBagi_(j.uniform, j.hari);
+  // Ketaatan = (pengantaran berpakaian sesuai + ID sesuai) ÷ (2 × pengantaran)
+  j.taat = lapBagi_(j.patuh + j.idcard, 2 * j.hari);
+  j.pU   = lapBagi_(j.patuh, j.hari);
   j.pId  = lapBagi_(j.idcard, j.hari);
+  // Mutu berpakaian pada skalanya sendiri (-1..+2) — inilah yang membedakan
+  // "pakaian sesuai" dari "penampilan bagus".
+  j.mutuU = lapBagi_(j.uniform, j.hari);
   return j;
 }
 
@@ -481,7 +498,7 @@ function lapSemuaPeringkat_(guide) {
   const total  = { jumlah: function (g) { return g.total; },
                    rata  : function (g) { return g.rataTotal; },
                    pakaiJumlah: pakaiJumlah };
-  const taat   = { jumlah: function (g) { return g.uniform + g.idcard; },
+  const taat   = { jumlah: function (g) { return g.patuh + g.idcard; },
                    rata  : function (g) { return g.taat; } };
   const etika  = { jumlah: function (g) { return g.etika; },
                    rata  : function (g) { return g.rataEtika; } };
@@ -616,10 +633,11 @@ function lapTulisRingkasan_(sh, r, guide, harian) {
     ['Guide terdaftar',                       guide.length,   '0'],
     ['Guide yang sempat dinilai',             dinilai,        '0'],
     ['Hari operasi tercatat',                 harian.length,  '0'],
-    ['Jumlah kehadiran (guide-hari)',         semua.hari,     '0'],
-    ['Berseragam sesuai',                     semua.uniform,  '0'],
+    ['Jumlah pengantaran dinilai',            semua.hari,     '0'],
+    ['Pengantaran berseragam sesuai',         semua.patuh,    '0'],
     ['Memakai ID-Card',                       semua.idcard,   '0'],
     ['Ketaatan berpakaian',                   semua.pU,       '0.0%'],
+    ['Mutu berpakaian (-1 s.d. +2)',          semua.mutuU,    '0.00'],
     ['Ketaatan ID-Card',                      semua.pId,      '0.0%'],
     ['Ketaatan berpakaian & ID (gabungan)',   semua.taat,     '0.0%'],
     ['Jumlah nilai etika',                    semua.etika,    '0'],
@@ -644,7 +662,7 @@ function lapTulisRingkasan_(sh, r, guide, harian) {
 function lapTulisTabelRegu_(sh, r, guide) {
   r = lapJudulBagian_(sh, r, 'B.  REKAP PER REGU');
 
-  r = lapKepalaTabel_(sh, r, ['Regu', 'Guide', 'Hari hadir', 'Uniform sesuai',
+  r = lapKepalaTabel_(sh, r, ['Regu', 'Guide', 'Antar', 'Seragam sesuai',
                               'ID-Card sesuai', '% Taat (U+ID)', 'Etika', 'Review', 'Nilai total']);
 
   const data = [];
@@ -655,11 +673,11 @@ function lapTulisTabelRegu_(sh, r, guide) {
     LAP_REGU.filter(function (x) { return x.kategori === kategori; })
       .forEach(function (x) {
         const j = lapJumlahkan_(lapSaringRegu_(guide, x.kode));
-        data.push([x.kode, j.guide, j.hari, j.uniform, j.idcard, j.taat, j.etika, j.review, j.total]);
+        data.push([x.kode, j.guide, j.hari, j.patuh, j.idcard, j.taat, j.etika, j.review, j.total]);
         n++;
       });
     const jk = lapJumlahkan_(lapSaringKategori_(guide, kategori));
-    data.push(['Sub ' + kategori.toUpperCase(), jk.guide, jk.hari, jk.uniform, jk.idcard,
+    data.push(['Sub ' + kategori.toUpperCase(), jk.guide, jk.hari, jk.patuh, jk.idcard,
                jk.taat, jk.etika, jk.review, jk.total]);
     tebal.push(n);
     n++;
@@ -757,7 +775,7 @@ function lapTulisPeringkat_(sh, r, guide) {
       .setFontSize(9).setFontWeight('bold');
     r++;
 
-    r = lapKepalaTabel_(sh, r, ['Nama guide', 'Regu', 'Hari hadir', t.satuan, 'Rata-rata/hari']);
+    r = lapKepalaTabel_(sh, r, ['Nama guide', 'Regu', 'Antar', t.satuan, 'Rata-rata/antar']);
 
     if (!t.hasil.baris.length) {
       r = lapCatatan_(sh, r, 'Belum ada guide yang memenuhi syarat.');
@@ -774,8 +792,8 @@ function lapTulisPeringkat_(sh, r, guide) {
 
   r = lapCatatan_(sh, r,
     'Peringkat diurutkan memakai ' + dasar + ', dengan syarat minimal ' + lapMinHari_() +
-    ' hari hadir. Guide di bawah batas itu tidak dibuang dari data, hanya tidak ikut ditampilkan ' +
-    'di tabel ini. Tabel "Review terbanyak" dikecualikan dari syarat hari. Kolom "Hari hadir" ' +
+    ' pengantaran. Guide di bawah batas itu tidak dibuang dari data, hanya tidak ikut ditampilkan ' +
+    'di tabel ini. Tabel "Review terbanyak" dikecualikan dari syarat itu. Kolom "Antar" ' +
     'sengaja ditampilkan agar terlihat bila ada nama yang menonjol hanya karena bertugas sedikit hari.');
   return r;
 }
@@ -791,13 +809,13 @@ function lapTulisDaftarRegu_(sh, r, guide, regu, huruf) {
     daftar.sort(function (a, b) { return a.nama.localeCompare(b.nama, 'id'); });
   }
 
-  r = lapKepalaTabel_(sh, r, ['Nama guide', 'Regu', 'Hari hadir', 'Uniform sesuai',
+  r = lapKepalaTabel_(sh, r, ['Nama guide', 'Regu', 'Antar', 'Seragam sesuai',
                               'ID-Card sesuai', '% Taat (U+ID)', 'Etika', 'Review', 'Nilai total']);
 
   if (!daftar.length) return lapCatatan_(sh, r, 'Tidak ada guide terdaftar pada regu ini.');
 
   const data = daftar.map(function (g) {
-    return [g.nama, g.regu.join('/'), g.hari, g.uniform, g.idcard,
+    return [g.nama, g.regu.join('/'), g.hari, g.patuh, g.idcard,
             (g.hari > 0 ? g.taat : '—'), g.etika, g.review, g.total];
   });
   const r0 = r;
@@ -1072,7 +1090,7 @@ function ujiLaporan() {
     const rapi = lapAmbilGuide_(bulan);
     const j = lapJumlahkan_(rapi);
     catat.push('Hasil normalisasi      : ' + rapi.length + ' guide, ' + j.hari +
-      ' guide-hari, ketaatan ' + (j.taat * 100).toFixed(1) + '%');
+      ' pengantaran, ketaatan ' + (j.taat * 100).toFixed(1) + '%');
     LAP_REGU.forEach(function (x) {
       catat.push('  regu ' + x.kode + '              : ' + lapSaringRegu_(rapi, x.kode).length + ' guide');
     });

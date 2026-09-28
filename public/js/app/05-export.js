@@ -13,7 +13,7 @@
   'use strict';
 
   const App = window.App;
-  const { jamLokal } = App;
+  const { jamLokal, nilaiUniform } = App;
 
   /**
    * Rangkuman penilaian yang tersimpan di PERANGKAT INI.
@@ -30,35 +30,40 @@
 
     for (const e of list) {
       const c = e.criteria || {};
-      const u = c.uniform ? 1 : 0;
+      const u = nilaiUniform(c.uniform);
+      const patuh = u >= 1 ? 1 : 0;
       const i = c.idCard ? 1 : 0;
       const et = Math.min(5, Math.max(-5, Number(c.etika) || 0));
       const tgl = DB.tanggalLokal(e.timestamp);
       const pos = Number(e.pos) || 0;
 
       const kunci = `${e.guideId}|${tgl}`;
+      // Tiap penilaian adalah satu PENGANTARAN tersendiri. Dulu nilai dalam
+      // sehari digabung dan diambil yang terburuk, karena penilaian kedua pasti
+      // koreksi — sekarang keduanya sah, jadi dijumlahkan.
       const h = harian.get(kunci);
       if (!h) {
         harian.set(kunci, { tgl, guideId: e.guideId, guideName: e.guideName,
-                            uniform: u, idCard: i, etika: et,
+                            uniform: u, patuh, idCard: i, etika: et,
                             pos: new Set([pos]), jml: 1 });
       } else {
-        h.uniform = Math.min(h.uniform, u);
-        h.idCard = Math.min(h.idCard, i);
-        h.etika = Math.min(h.etika, et);
+        h.uniform += u;
+        h.patuh += patuh;
+        h.idCard += i;
+        h.etika += et;
         h.pos.add(pos);
         h.jml++;
       }
 
-      // Digabung dulu pada tingkat (guide, pos, tanggal) supaya penilaian ulang
-      // di pos yang sama tidak terhitung sebagai kehadiran kedua.
       const kp = `${e.guideId}|${pos}|${tgl}`;
       const ph = perPosHari.get(kp);
-      if (!ph) perPosHari.set(kp, { pos, uniform: u, idCard: i, etika: et });
+      if (!ph) perPosHari.set(kp, { pos, uniform: u, patuh, idCard: i, etika: et, antar: 1 });
       else {
-        ph.uniform = Math.min(ph.uniform, u);
-        ph.idCard = Math.min(ph.idCard, i);
-        ph.etika = Math.min(ph.etika, et);
+        ph.uniform += u;
+        ph.patuh += patuh;
+        ph.idCard += i;
+        ph.etika += et;
+        ph.antar++;
       }
 
       const t = perTgl.get(tgl) || { tgl, jml: 0, guides: new Set(), hadir: 0 };
@@ -68,14 +73,14 @@
 
     const perPos = new Map();
     for (const ph of perPosHari.values()) {
-      const p = perPos.get(ph.pos) || { pos: ph.pos, hadir: 0, uniform: 0, idCard: 0, etika: 0 };
-      p.hadir++; p.uniform += ph.uniform; p.idCard += ph.idCard;
-      p.etika += ph.etika;
+      const p = perPos.get(ph.pos) || { pos: ph.pos, hadir: 0, uniform: 0, patuh: 0, idCard: 0, etika: 0 };
+      p.hadir += ph.antar; p.uniform += ph.uniform; p.patuh += ph.patuh;
+      p.idCard += ph.idCard; p.etika += ph.etika;
       perPos.set(ph.pos, p);
     }
     for (const h of harian.values()) {
       const t = perTgl.get(h.tgl);
-      if (t) t.hadir += h.pos.size;
+      if (t) t.hadir += h.jml;
     }
 
     const urutTgl = (a, b) => String(a.tgl).localeCompare(String(b.tgl));
@@ -133,24 +138,25 @@
     if (diganti.length) out.push(barisCsv(['Dibetulkan lewat koreksi (tidak ikut rekap)', diganti.length]));
 
     judul('REKAP HARIAN PER GUIDE — cocokkan dengan tab Rekap A1/A2/D1/D2 di spreadsheet');
-    out.push(barisCsv(['(Bila satu guide dinilai beberapa kali sehari: UNI FORM, ID & ETIKA diambil yang paling buruk)']));
+    out.push(barisCsv(['(Tiap penilaian = satu PENGANTARAN. Angka harian adalah JUMLAH seluruh pengantaran hari itu)']));
+    out.push(barisCsv(['(UNI FORM bernilai -1 tidak sesuai, +1 sesuai, +2 penampilan bagus — jadi jumlahnya bisa minus)']));
+    out.push(barisCsv(['(SERAGAM SESUAI = berapa pengantaran yang bernilai +1 atau +2)']));
     out.push(barisCsv(['(Kolom REVIEW tidak ada di sini karena tidak diisi lewat aplikasi — lihat tab Rekap di spreadsheet)']));
-    out.push(barisCsv(['(KEHADIRAN = berapa pos yang memeriksa hari itu. Dinilai dua kali di pos yang sama tetap dihitung 1)']));
-    out.push(barisCsv(['Tanggal', 'Nama Guide', 'guideId', 'Regu', 'UNI FORM', 'ID', 'ETIKA',
-                       'KEHADIRAN', 'Dinilai di Pos', 'Jumlah Penilaian']));
+    out.push(barisCsv(['Tanggal', 'Nama Guide', 'guideId', 'Regu', 'UNI FORM', 'SERAGAM SESUAI',
+                       'ID', 'ETIKA', 'ANTAR', 'Dinilai di Pos']));
     harian.forEach(h => out.push(barisCsv([
       h.tgl, h.guideName, h.guideId, reguGuide(h.guideId),
-      h.uniform, h.idCard, h.etika,
-      h.pos.size, [...h.pos].sort().join(' & '), h.jml,
+      h.uniform, h.patuh, h.idCard, h.etika,
+      h.jml, [...h.pos].sort().join(' & '),
     ])));
 
     judul('REKAP PER POS PEMERIKSAAN');
-    out.push(barisCsv(['(Hadir dihitung per guide per hari — bukan jumlah penilaian)']));
-    out.push(barisCsv(['Pos', 'Hadir (guide-hari)', 'Uniform Sesuai', 'ID Sesuai', 'Total Etika']));
-    perPos.forEach(p => out.push(barisCsv([p.pos, p.hadir, p.uniform, p.idCard, p.etika])));
+    out.push(barisCsv(['(Antar = jumlah pengantaran yang dinilai di pos itu)']));
+    out.push(barisCsv(['Pos', 'Antar', 'Uniform (jumlah nilai)', 'Seragam Sesuai', 'ID Sesuai', 'Total Etika']));
+    perPos.forEach(p => out.push(barisCsv([p.pos, p.hadir, p.uniform, p.patuh, p.idCard, p.etika])));
 
     judul('REKAP PER TANGGAL');
-    out.push(barisCsv(['Tanggal', 'Total Kehadiran', 'Guide Berbeda', 'Jumlah Penilaian']));
+    out.push(barisCsv(['Tanggal', 'Total Pengantaran', 'Guide Berbeda', 'Jumlah Penilaian']));
     perTgl.forEach(t => out.push(barisCsv([t.tgl, t.hadir, t.guides.size, t.jml])));
 
     judul('RINCIAN SEMUA PENILAIAN');

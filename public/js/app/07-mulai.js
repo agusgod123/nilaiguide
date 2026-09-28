@@ -14,7 +14,7 @@
   'use strict';
 
   const App = window.App;
-  const { APP_VERSION, $, $$, ETIKA_MIN, ETIKA_MAKS, KRIT_ANGKA } = App;
+  const { APP_VERSION, $, $$, ETIKA_MIN, ETIKA_MAKS, KRIT_ANGKA, KRIT_TINGKAT } = App;
 
   App.bind = function bind() {
     $('#btnMenu').addEventListener('click', App.openDrawer);
@@ -86,7 +86,11 @@
       if (!KRIT_ANGKA[c.dataset.crit]) c.classList.add('unset');
 
       c.querySelectorAll('.seg').forEach(btn => btn.addEventListener('click', () => {
-        App.state.form.crit[c.dataset.crit] = Number(btn.dataset.val) === 1;
+        // Uniform menyimpan ANGKA bertingkat (-1/+1/+2); kriteria lain tetap
+        // Ya/Tidak. Tanpa pemisahan ini, "Bagus" tersimpan sebagai false.
+        App.state.form.crit[c.dataset.crit] = KRIT_TINGKAT[c.dataset.crit]
+          ? Number(btn.dataset.val)
+          : Number(btn.dataset.val) === 1;
         App.applyCritUI(); App.saveDraft(); App.haptic(15);
         $('#draftNote').hidden = false;
       }));

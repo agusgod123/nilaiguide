@@ -35,29 +35,61 @@ function bacaGuides_() {
 
 
 /**
- * Rangkum penilaian satu bulan.
- * @return {{ harian: Object, perPos: Object, kehadiran: Object, tanggal: Array }}
- *   harian[guideId][tgl]    = { uniform, idCard, review }   (digabung lintas pos)
- *   perPos[guideId][pos]    = { jml, uniform, idCard, review }
- *   kehadiran[guideId][tgl] = berapa POS yang memeriksa guide itu hari itu (1..3)
+ * Satu pengantaran = satu baris penilaian yang masih aktif.
  *
- * SATU POS BERNILAI SATU. Diperiksa berkali-kali di pos yang sama pada hari
- * yang sama tetap dihitung satu — pemeriksaan kedua biasanya koreksi, bukan
- * kehadiran tambahan. Karena itu penggabungan dilakukan pada tingkat
- * (guide, pos, tanggal) lebih dulu, baru dijumlahkan.
+ * Dulu penilaian digabung ke tingkat (guide, hari) dan diambil yang PALING
+ * BURUK, karena satu pos hanya boleh menilai sekali sehari sehingga baris kedua
+ * pasti koreksi. Sejak penilaian dihitung per pengantaran, baris kedua adalah
+ * pengantaran yang benar-benar berbeda — jadi tidak boleh lagi saling menimpa.
+ * Yang dikumpulkan sekarang JUMLAH dan CACAH, supaya rata-rata per pengantaran
+ * bisa dihitung di mana pun angkanya dibutuhkan.
+ */
+function tambahPengantaran_(peta, kunci, n) {
+  var s = peta[kunci];
+  if (!s) s = peta[kunci] = { antar: 0, uniform: 0, idCard: 0, review: 0,
+                              etika: 0, uniformPatuh: 0 };
+  s.antar++;
+  s.uniform += n.uniform;
+  s.idCard  += n.idCard;
+  s.review  += n.review;
+  s.etika   += n.etika;
+  // Kolom persen hanya mengenal patuh / tidak, sementara Uniform punya tiga
+  // tingkat — cacahnya dihitung terpisah dari jumlah mutunya.
+  if (n.uniform >= UNIFORM_PATUH) s.uniformPatuh++;
+  return s;
+}
+
+
+/** Rata-rata per pengantaran; 0 pengantaran menghasilkan null, bukan 0. */
+function rataPengantaran_(s, kolom) {
+  if (!s || !s.antar) return null;
+  return s[kolom] / s.antar;
+}
+
+
+/**
+ * Rangkum penilaian satu bulan.
+ * @return {{ harian: Object, perPos: Object, total: Object, tanggal: Array }}
+ *   harian[guideId][tgl] = { antar, uniform, idCard, review, etika, uniformPatuh }
+ *                          JUMLAH seluruh pengantaran guide itu pada hari itu
+ *   perPos[guideId][pos] = idem, dikelompokkan per pos sebulan
+ *   total[guideId]       = idem, seluruh bulan — dasar rata-rata per pengantaran
+ *
+ * perPos sengaja dipertahankan sebagai pengaman: kalau Pos 1 dan Pos 3 ternyata
+ * menilai dengan standar berbeda, guide yang lebih sering ketemu satu pos jadi
+ * diuntungkan atau dirugikan. Selisihnya harus bisa dilihat, bukan ditebak.
  */
 function rangkumBulan_(bulan) {
   var sh = sheet_(SHEET_EVAL);
   var last = sh.getLastRow();
-  var harian = {}, perPosHari = {}, setTanggal = {};
-  if (last < 2) return { harian: harian, perPos: {}, kehadiran: {}, tanggal: [] };
+  var harian = {}, perPos = {}, total = {}, setTanggal = {};
+  if (last < 2) return { harian: harian, perPos: perPos, total: total, tanggal: [] };
 
   var data = sh.getRange(2, 1, last - 1, HEADER_EVAL.length).getValues();
   for (var i = 0; i < data.length; i++) {
     var r = data[i];
     // Baris yang sudah digantikan koreksi TIDAK ikut rekap. Barisnya tetap ada
-    // di tab Evaluations sebagai jejak, tapi angkanya bukan lagi angka yang
-    // berlaku.
+    // di tab Evaluations sebagai jejak, tapi angkanya bukan lagi yang berlaku.
     if (String(r[KOL_STATUS - 1] || '').trim().toLowerCase() === STATUS_GANTI) continue;
     var waktu = new Date(r[1]);
     if (isNaN(waktu.getTime())) continue;
@@ -66,60 +98,25 @@ function rangkumBulan_(bulan) {
     var tgl = kodeTanggal_(waktu);
     var pos = Number(r[2]) || 0;
     var gid = String(r[3]).trim();
-    var uniform = Number(r[5]) ? 1 : 0;
-    var idCard = Number(r[6]) ? 1 : 0;
-    var review = Math.max(0, Number(r[7]) || 0);
-    var etika = Math.min(ETIKA_MAKS, Math.max(ETIKA_MIN, Number(r[8]) || 0));
+    // normalUniform_ dipakai bersama pintu masuk data, supaya baris lama
+    // (Ya/Tidak = 1/0) dan baris baru (-1/+1/+2) terbaca dengan skala sama.
+    var n = {
+      uniform: normalUniform_(r[5]),
+      idCard:  Number(r[6]) ? 1 : 0,
+      review:  Math.max(0, Number(r[7]) || 0),
+      etika:   Math.min(ETIKA_MAKS, Math.max(ETIKA_MIN, Number(r[8]) || 0))
+    };
 
     setTanggal[tgl] = true;
-
     if (!harian[gid]) harian[gid] = {};
-    var sel = harian[gid][tgl];
-    if (!sel) {
-      harian[gid][tgl] = { uniform: uniform, idCard: idCard, review: review, etika: etika };
-    } else {
-      sel.uniform = Math.min(sel.uniform, uniform);   // paling buruk
-      sel.idCard = Math.min(sel.idCard, idCard);      // paling buruk
-      sel.review = Math.max(sel.review, review);      // jangan hilangkan review
-      sel.etika = Math.min(sel.etika, etika);         // paling rendah
-    }
-
-    // Gabungan pada tingkat (guide, pos, tanggal) — dasar hitungan kehadiran
-    if (!perPosHari[gid]) perPosHari[gid] = {};
-    if (!perPosHari[gid][pos]) perPosHari[gid][pos] = {};
-    var ph = perPosHari[gid][pos][tgl];
-    if (!ph) {
-      perPosHari[gid][pos][tgl] = { uniform: uniform, idCard: idCard, review: review, etika: etika };
-    } else {
-      ph.uniform = Math.min(ph.uniform, uniform);
-      ph.idCard = Math.min(ph.idCard, idCard);
-      ph.review = Math.max(ph.review, review);
-      ph.etika = Math.min(ph.etika, etika);
-    }
-  }
-
-  // Turunkan rincian per pos dan kehadiran harian dari gabungan di atas
-  var perPos = {}, kehadiran = {};
-  for (var g in perPosHari) {
-    perPos[g] = {};
-    kehadiran[g] = {};
-    for (var p in perPosHari[g]) {
-      var hari = perPosHari[g][p];
-      var jml = 0, jUniform = 0, jIdCard = 0, jReview = 0, jEtika = 0;
-      for (var t in hari) {
-        jml++;                                   // satu hari di pos ini = satu kehadiran
-        jUniform += hari[t].uniform;
-        jIdCard += hari[t].idCard;
-        jReview += hari[t].review;
-        jEtika += hari[t].etika;
-        kehadiran[g][t] = (kehadiran[g][t] || 0) + 1;
-      }
-      perPos[g][p] = { jml: jml, uniform: jUniform, idCard: jIdCard, review: jReview, etika: jEtika };
-    }
+    tambahPengantaran_(harian[gid], tgl, n);
+    if (!perPos[gid]) perPos[gid] = {};
+    tambahPengantaran_(perPos[gid], pos, n);
+    tambahPengantaran_(total, gid, n);
   }
 
   var tanggal = Object.keys(setTanggal).sort();
-  return { harian: harian, perPos: perPos, kehadiran: kehadiran, tanggal: tanggal };
+  return { harian: harian, perPos: perPos, total: total, tanggal: tanggal };
 }
 
 
@@ -143,10 +140,18 @@ function bacaReviewManual_(namaTab) {
   var lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
   if (lastRow < 5 || lastCol < 4) return peta;
 
-  // Baris 2 memuat 'TGL: d-m-yyyy' di kolom pertama tiap blok 4 kolom.
+  // Baris 2 memuat 'TGL: d-m-yyyy' di sel pertama tiap blok tanggal.
+  //
+  // SELURUH kolom dipindai, bukan melompat selebar blok. Lebar blok pernah
+  // berubah (4 kolom sebelum kolom ANTAR ditambahkan, 5 sesudahnya), dan tab
+  // bulan-bulan lama masih memakai lebar lama. Melompat dengan lebar tetap
+  // membuat pembacaan tab lama meleset — dan REVIEW hanya ada di tab ini,
+  // diketik tangan oleh tim, jadi salah baca berarti angkanya HILANG saat tab
+  // disusun ulang. Yang tetap benar di kedua tata letak: REVIEW selalu kolom
+  // ketiga blok, dua kolom setelah sel bertanda 'TGL:'.
   var barisTgl = sh.getRange(2, 1, 1, lastCol).getValues()[0];
   var kolTgl = {};                              // kolom REVIEW -> 'yyyy-mm-dd'
-  for (var c = 2; c + 2 <= lastCol; c += 4) {
+  for (var c = 2; c + 2 <= lastCol; c++) {
     var m = String(barisTgl[c - 1] || '').match(/TGL:\s*(\d{1,2})-(\d{1,2})-(\d{4})/);
     if (!m) continue;
     kolTgl[c + 2] = m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);

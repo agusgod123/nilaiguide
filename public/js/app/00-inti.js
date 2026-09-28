@@ -86,6 +86,31 @@
   // Kriteria yang diisi angka lewat tombol - dan +, bukan Ya/Tidak
   const KRIT_ANGKA = { etika: '#etikaNilai' };
 
+  // Uniform tiga tingkat, menggantikan Ya/Tidak. Nilainya ikut dijumlahkan ke
+  // nilai total seperti Etika, jadi "penampilan bagus" benar-benar bernilai
+  // lebih daripada sekadar "sesuai".
+  const UNIFORM_NILAI = [-1, 1, 2];
+
+  const UNIFORM_LABEL = { '-1': 'Tidak sesuai', '1': 'Sesuai', '2': 'Bagus' };
+
+  // Kriteria yang nilainya angka bertingkat dari tombol, bukan Ya/Tidak
+  const KRIT_TINGKAT = { uniform: true };
+
+  /**
+   * Samakan nilai Uniform ke skala tiga tingkat.
+   * Entri lama di perangkat menyimpannya sebagai boolean, dan 0 hanya ada di
+   * data lama — keduanya dipetakan ke -1 "tidak sesuai", sama seperti server.
+   */
+  const nilaiUniform = v => {
+    if (v === true) return 1;
+    if (v === false) return -1;
+    const n = Number(v);
+    if (!isFinite(n) || n === 0) return -1;
+    return Math.max(-1, Math.min(2, Math.round(n)));
+  };
+
+  const labelUniform = v => UNIFORM_LABEL[String(nilaiUniform(v))];
+
   App.toast = function toast(msg, type = '', icon = '') {
     const el = document.createElement('div');
     el.className = 'toast ' + type;
@@ -119,5 +144,8 @@
   }
 
   /* Diekspor supaya berkas lain bisa men-destructure-nya dari App. */
-  Object.assign(App, { APP_VERSION, $, $$, TITLES, uuid, fmtTime, esc, jamLokal, ETIKA_MIN, ETIKA_MAKS, KRIT_ANGKA });
+  Object.assign(App, { APP_VERSION, $, $$, TITLES, uuid, fmtTime, esc, jamLokal,
+                       ETIKA_MIN, ETIKA_MAKS, KRIT_ANGKA,
+                       UNIFORM_NILAI, UNIFORM_LABEL, KRIT_TINGKAT,
+                       nilaiUniform, labelUniform });
 })();

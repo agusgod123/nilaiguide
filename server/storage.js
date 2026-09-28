@@ -66,7 +66,7 @@ function createSqliteStore() {
     saveEvaluation(e) {
       const info = insert.run(
         e.evaluationId, e.guideId, e.guideName, e.pos, e.timestamp,
-        e.criteria.idCard ? 1 : 0, e.criteria.uniform ? 1 : 0,
+        e.criteria.idCard ? 1 : 0, store.normalUniform(e.criteria.uniform),
         Number(e.criteria.review) || 0, Number(e.criteria.etika) || 0,
         e.catatan || '', new Date().toISOString(), e.koreksiDari || null
       );
@@ -92,7 +92,7 @@ function rowToEval(r) {
     guideName: r.guideName,
     pos: r.pos,
     timestamp: r.timestamp,
-    criteria: { idCard: !!r.idCard, uniform: !!r.uniform,
+    criteria: { idCard: !!r.idCard, uniform: Number(r.uniform),
                 review: Number(r.review) || 0, etika: Number(r.etika) || 0 },
     catatan: r.catatan || '',
     receivedAt: r.receivedAt,
@@ -141,5 +141,21 @@ try {
   store = createJsonStore();
   console.log('[storage] SQLite tidak dapat dipakai -> fallback file JSON (' + err.message + ')');
 }
+
+/**
+ * Samakan nilai Uniform ke skala tiga tingkat (-1, +1, +2).
+ * Aturannya harus sama persis dengan server-gas/03_Ingest.gs: data lama
+ * menyimpan Ya/Tidak sebagai 1/0, dan 0 tidak pernah dipakai skala baru,
+ * jadi 0 berarti "tidak sesuai" = -1.
+ */
+store.normalUniform = function normalUniform(v) {
+  if (v === true) return 1;
+  if (v === false) return -1;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n === 0) return -1;
+  return Math.max(-1, Math.min(2, Math.round(n)));
+};
+
+store.UNIFORM_NILAI = [-1, 1, 2];
 
 module.exports = store;

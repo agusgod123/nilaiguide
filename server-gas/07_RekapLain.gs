@@ -16,12 +16,18 @@
 
 
 /**
- * Tab kehadiran harian — "satu pos bernilai satu".
+ * Tab kehadiran harian — satu pengantaran bernilai satu.
  *
  * Baris  = seluruh guide aktif (yang belum pernah hadir pun ikut tercantum,
  *          supaya terlihat siapa yang tidak pernah diperiksa)
- * Kolom  = tanggal, berisi angka 1..3 = berapa pos yang memeriksa hari itu
- * Kosong = tidak hadir atau tidak diperiksa sama sekali hari itu
+ * Kolom  = tanggal, berisi berapa PENGANTARAN guide itu dinilai hari tersebut
+ * Kosong = tidak bertugas atau tidak diperiksa sama sekali hari itu
+ *
+ * Dulu angkanya 1..3 (berapa pos yang memeriksa) dan mentok di 3. Sekarang
+ * tidak ada batas atas: guide yang mengantar enam kali sehari berangka 6.
+ * Tab inilah tempat cacah pengantaran harian dibaca — tab rekap regu hanya
+ * memuat JUMLAH nilainya, sehingga tanpa tab ini angka 4 di sana tidak bisa
+ * dibedakan antara dua pengantaran bagus atau empat pengantaran biasa.
  */
 function bangunRekapKehadiran_(bulan, ringkasan, guides) {
   var sh = siapkanTab_('Rekap Kehadiran ' + bulan);
@@ -37,8 +43,10 @@ function bangunRekapKehadiran_(bulan, ringkasan, guides) {
     .setFontWeight('normal').setFontSize(9).setHorizontalAlignment('right');
 
   sh.getRange(2, 1).setValue(
-    'Angka = berapa pos yang memeriksa guide itu pada hari tersebut (maksimal 3). ' +
-    'Diperiksa dua kali di pos yang sama pada hari yang sama tetap dihitung satu.')
+    'Angka = berapa PENGANTARAN guide itu dinilai pada hari tersebut. Satu guide ' +
+    'boleh dinilai berkali-kali sehari, termasuk di pos yang sama, karena tiap ' +
+    'pengantaran dihitung sendiri. Penilaian yang sudah dibetulkan lewat koreksi ' +
+    'tidak ikut dihitung.')
     .setFontSize(9).setFontColor('#5C6360');
 
   var head = ['NAME', 'REGU'];
@@ -46,7 +54,7 @@ function bangunRekapKehadiran_(bulan, ringkasan, guides) {
     var bagian = tanggal[i].split('-');
     head.push(Number(bagian[2]) + '-' + Number(bagian[1]));
   }
-  head.push('TOTAL POS', 'HARI HADIR');
+  head.push('TOTAL ANTAR', 'HARI HADIR');
   sh.getRange(3, 1, 1, head.length).setValues([head])
     .setFontWeight('bold').setFontColor('#FFFFFF').setBackground('#0B5D3B')
     .setHorizontalAlignment('center');
@@ -60,10 +68,11 @@ function bangunRekapKehadiran_(bulan, ringkasan, guides) {
     var baris = [];
     for (var a = 0; a < urut.length; a++) {
       var g = urut[a];
-      var k = ringkasan.kehadiran[g.guideId] || {};
+      var k = ringkasan.harian[g.guideId] || {};
       var row = [g.guideName, g.regu.join(', ')];
       for (var d = 0; d < tanggal.length; d++) {
-        var n = k[tanggal[d]] || 0;
+        var sel = k[tanggal[d]];
+        var n = sel ? sel.antar : 0;
         row.push(n || '');                       // kosong, bukan 0, bila tidak hadir
         if (n) adaIsi++;
       }
@@ -92,7 +101,7 @@ function bangunRekapKehadiran_(bulan, ringkasan, guides) {
     if (tanggal.length) {
       var barisAkhir = 4 + baris.length;
       var fJml = ['JUMLAH GUIDE HADIR', ''];
-      var fPos = ['TOTAL KEHADIRAN POS', ''];
+      var fPos = ['TOTAL PENGANTARAN', ''];
       for (var kc = 3; kc <= 2 + tanggal.length; kc++) {
         var h = kolomHuruf_(kc);
         fJml.push('=COUNTIF(' + h + '5:' + h + barisAkhir + ',">0")');
@@ -135,14 +144,23 @@ function bangunRekapKehadiran_(bulan, ringkasan, guides) {
 }
 
 
-/** Tab rincian: capaian tiap guide dipisah per pos pemeriksaan. */
+/**
+ * Tab rincian: capaian tiap guide dipisah per pos pemeriksaan.
+ *
+ * Kolom "Rata Uni" per pos adalah PENGAMAN, bukan hiasan. Sejak tiap penilaian
+ * dihitung sebagai satu pengantaran, guide yang lebih sering ketemu satu pos
+ * akan condong ke standar pos itu. Kalau Pos 1 dan Pos 3 ternyata menilai
+ * dengan ukuran berbeda — misalnya seragam sudah lusuh saat sampai Pos 3 —
+ * selisihnya harus kelihatan di sini, bukan ditebak.
+ */
 function bangunRekapPerPos_(bulan, ringkasan, guides) {
   var sh = siapkanTab_('Rekap per Pos ' + bulan);
   var head = ['NAME', 'REGU'];
   for (var p = 1; p <= 3; p++) {
-    head.push('P' + p + ' Hadir', 'P' + p + ' Uniform', 'P' + p + ' ID', 'P' + p + ' Review', 'P' + p + ' Etika');
+    head.push('P' + p + ' Antar', 'P' + p + ' Uniform', 'P' + p + ' ID',
+              'P' + p + ' Review', 'P' + p + ' Etika', 'P' + p + ' Rata Uni');
   }
-  head.push('Total Kehadiran');
+  head.push('Total Antar');
 
   sh.getRange(1, 1).setValue('RINCIAN PER POS PEMERIKSAAN — ' + bulan);
   sh.getRange(1, 1, 1, head.length)
@@ -162,15 +180,19 @@ function bangunRekapPerPos_(bulan, ringkasan, guides) {
     var row = [g.guideName, g.regu.join(', ')];
     var total = 0;
     for (var pos = 1; pos <= 3; pos++) {
-      var d = pp[pos] || { jml: 0, uniform: 0, idCard: 0, review: 0, etika: 0 };
-      row.push(d.jml, d.uniform, d.idCard, d.review, d.etika || 0);
-      total += d.jml;
+      var d = pp[pos];
+      if (!d) { row.push('', '', '', '', '', ''); continue; }
+      var rata = rataPengantaran_(d, 'uniform');
+      row.push(d.antar, d.uniform, d.idCard, d.review, d.etika || 0,
+               rata === null ? '' : Math.round(rata * 100) / 100);
+      total += d.antar;
     }
     row.push(total);
     baris.push(row);
   }
   if (baris.length) {
-    baris.sort(function (a, b) { return b[17] - a[17]; });   // paling sering dinilai di atas
+    var kolAkhir = baris[0].length - 1;
+    baris.sort(function (a, b) { return b[kolAkhir] - a[kolAkhir]; });   // paling sering dinilai di atas
     sh.getRange(3, 1, baris.length, head.length).setValues(baris);
   }
   sh.setFrozenRows(2);

@@ -177,7 +177,12 @@
         timestamp: item.timestamp,
         criteria: {
           idCard: !!item.criteria.idCard,
-          uniform: !!item.criteria.uniform,
+          // Entri lama di antrean menyimpan boolean; dikirim apa adanya karena
+          // server memetakannya sendiri (true=+1, false=-1). Entri baru sudah
+          // berupa angka pada skala tiga tingkat.
+          uniform: typeof item.criteria.uniform === 'boolean'
+            ? item.criteria.uniform
+            : Number(item.criteria.uniform),
           etika: Math.min(5, Math.max(-5, Number(item.criteria.etika) || 0)),
         },
         catatan: item.catatan || '',

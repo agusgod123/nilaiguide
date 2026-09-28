@@ -15,7 +15,7 @@
   'use strict';
 
   const App = window.App;
-  const { $, fmtTime, esc, jamLokal } = App;
+  const { $, fmtTime, esc, jamLokal, nilaiUniform, labelUniform } = App;
 
   /**
    * Tiga keadaan, bukan dua:
@@ -66,7 +66,7 @@
       // saja menuduh guide yang bersangkutan tidak patuh.
       const nilai = e.corrupt
         ? '<span class="badge bad">nilai tidak terbaca di perangkat ini</span>'
-        : `${b('ID', !!c.idCard)}${b('Uniform', !!c.uniform)}` +
+        : `${b('ID', !!c.idCard)}${b('Uniform', nilaiUniform(c.uniform) >= 1)}` +
           `<span class="badge">Etika ${App.nilaiEtika(c.etika)}</span>`;
       const keterangan = e.corrupt
         ? `<span class="cmeta">Sudah terkirim ke server — lihat spreadsheet, kode ${esc(String(e.evaluationId).slice(0, 8))}</span>`
@@ -122,7 +122,7 @@
     const c = asal.criteria || {};
     App.state.form = {
       pos: Number(asal.pos), guide: g,
-      crit: { idCard: !!c.idCard, uniform: !!c.uniform, etika: Number(c.etika) || 0 },
+      crit: { idCard: !!c.idCard, uniform: nilaiUniform(c.uniform), etika: Number(c.etika) || 0 },
       catatan: asal.catatan || '',
     };
     $('#posSelect').value = String(App.state.form.pos);
@@ -151,7 +151,7 @@
     bar.innerHTML =
       `<strong>✏️ Membetulkan penilaian ${esc(App.state.koreksi.guideName)}</strong>` +
       `<p>Tercatat pukul ${esc(jamLokal(App.state.koreksi.timestamp))} di Pos ${esc(App.state.koreksi.pos)}: ` +
-      `Uniform ${c.uniform ? 'Ya' : 'Tidak'}, ID ${c.idCard ? 'Ya' : 'Tidak'}, Etika ${App.nilaiEtika(c.etika)}. ` +
+      `Uniform ${labelUniform(c.uniform)}, ID ${c.idCard ? 'Ya' : 'Tidak'}, Etika ${App.nilaiEtika(c.etika)}. ` +
       `Ubah nilainya lalu tekan SIMPAN. Guide dan pos tidak bisa diganti — ` +
       `${App.state.koreksi.synced ? 'penilaian lama akan ditandai "diganti" di spreadsheet, tidak dihapus'
                         : 'penilaian ini belum terkirim, jadi cukup ditimpa di perangkat'}.</p>` +

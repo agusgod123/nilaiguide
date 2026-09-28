@@ -97,9 +97,12 @@ function doPost(e) {
     var sh = sheet_(SHEET_EVAL);
     var last = sh.getLastRow();
     // idAda   : evaluationId -> true
-    // aktifPos: kunci (guide|pos|tgl) -> evaluationId baris yang MASIH aktif
-    // barisId : evaluationId -> { row, status, kunci }  (untuk koreksi)
-    var idAda = {}, aktifPos = {}, barisId = {};
+    // jamAktif: 'guideId|pos' -> [{ ms, id }] jam penilaian yang MASIH aktif.
+    //           Menggantikan kunci harian lama: sejak penilaian dihitung per
+    //           pengantaran, satu guide boleh dinilai berkali-kali sehari di
+    //           pos yang sama, jadi yang tersisa hanya pengaman jeda.
+    // barisId : evaluationId -> { row, status, kunci, kunciGP }  (untuk koreksi)
+    var idAda = {}, jamAktif = {}, barisId = {};
     if (last > 1) {
       // Kolom A..D: evaluationId, timestamp, pos, guideId — plus kolom status.
       var kol = sh.getRange(2, 1, last - 1, 4).getValues();
@@ -111,10 +114,14 @@ function doPost(e) {
         var w = new Date(kol[i][1]);
         if (isNaN(w.getTime())) continue;
         var k = kunciPos_(String(kol[i][3]), kol[i][2], kodeTanggal_(w));
+        var kgp = kunciGuidePos_(String(kol[i][3]), kol[i][2]);
         // Baris dari sebelum kolom status ada dianggap aktif.
         var st = String(stat[i][0] || '').trim().toLowerCase();
-        barisId[idBaris] = { row: i + 2, status: st, kunci: k };
-        if (st !== STATUS_GANTI) aktifPos[k] = idBaris;
+        barisId[idBaris] = { row: i + 2, status: st, kunci: k, kunciGP: kgp };
+        if (st !== STATUS_GANTI) {
+          if (!jamAktif[kgp]) jamAktif[kgp] = [];
+          jamAktif[kgp].push({ ms: w.getTime(), id: idBaris });
+        }
       }
     }
 
@@ -138,6 +145,8 @@ function doPost(e) {
       var gid = String(it.guideId).trim();
       var tglIt = kodeTanggal_(new Date(it.timestamp));
       var kunci = kunciPos_(gid, it.pos, tglIt);
+      var kunciGP = kunciGuidePos_(gid, it.pos);
+      var msIt = new Date(it.timestamp).getTime();
       var koreksiDari = String(it.koreksiDari || '').trim();
 
       if (koreksiDari) {
@@ -165,35 +174,50 @@ function doPost(e) {
         }
         ditandaiGanti.push(asal.row);
         asal.status = STATUS_GANTI;          // cegah koreksi ganda dalam satu kiriman
+        // Baris yang digantikan tidak boleh lagi memicu pengaman jeda — koreksi
+        // menggantikan penilaian itu, bukan menambah pengantaran baru.
+        buangJamAktif_(jamAktif, asal.kunciGP, koreksiDari);
       } else {
-        // SATU POS HANYA MENILAI SATU KALI PER HARI.
+        // PENGAMAN JEDA, menggantikan "satu pos satu kali sehari".
+        // Guide yang sama boleh dinilai berkali-kali sehari di pos yang sama —
+        // itu memang pengantaran yang berbeda. Yang tidak masuk akal adalah dua
+        // penilaian berselang beberapa menit: itu hampir pasti salah pencet.
+        //
         // Pemeriksaannya di sini, bukan di aplikasi: hanya server yang memegang
-        // data seluruh pos. Perangkat di Pos 1 tidak mungkin tahu apa yang sudah
-        // dicatat perangkat lain — jadi kalau aturan ini ditegakkan di aplikasi,
-        // penilaian ganda antar perangkat akan lolos begitu saja.
-        // Pos LAIN tetap boleh menilai guide yang sama pada hari yang sama.
-        if (aktifPos[kunci]) {
+        // data seluruh pos. Perangkat di Pos 1 tidak tahu apa yang baru dicatat
+        // perangkat lain, jadi kalau ditegakkan di aplikasi, kiriman ganda antar
+        // perangkat lolos begitu saja.
+        //
+        // Selisihnya diambil MUTLAK: entri offline bisa tiba belakangan dengan
+        // cap waktu lebih awal, dan itu tetap pencetan ganda yang sama.
+        var bentrok = bentrokJeda_(jamAktif, kunciGP, msIt);
+        if (bentrok) {
           rejected.push({
             evaluationId: it.evaluationId,
-            errors: [(namaResmi[gid] || gid) + ' sudah dinilai di Pos ' + Number(it.pos) +
-                     ' pada ' + tglIt + ' — satu pos hanya menilai satu kali per hari.' +
-                     ' Untuk membetulkan nilainya, kirim koreksi (koreksiDari: ' +
-                     aktifPos[kunci] + ')'],
+            errors: [(namaResmi[gid] || gid) + ' baru saja dinilai di Pos ' + Number(it.pos) +
+                     ' (' + Math.round(Math.abs(bentrok.ms - msIt) / 60000) + ' menit dari penilaian ini)' +
+                     ' — jeda minimal ' + JEDA_PENILAIAN_MENIT + ' menit, jadi ini kemungkinan salah pencet.' +
+                     ' Kalau memang pengantaran berikutnya, tunggu jedanya habis.' +
+                     ' Untuk membetulkan nilainya, kirim koreksi (koreksiDari: ' + bentrok.id + ')'],
             sudahDinilai: true,
-            aktifSaatIni: aktifPos[kunci]
+            terlaluCepat: true,
+            aktifSaatIni: bentrok.id
           });
           continue;
         }
       }
-      aktifPos[kunci] = String(it.evaluationId);   // juga cegah ganda dalam satu kiriman
-      barisId[String(it.evaluationId)] = { row: 0, status: STATUS_AKTIF, kunci: kunci };
+      // Juga mencegah pencetan ganda di dalam SATU kiriman.
+      if (!jamAktif[kunciGP]) jamAktif[kunciGP] = [];
+      jamAktif[kunciGP].push({ ms: msIt, id: String(it.evaluationId) });
+      barisId[String(it.evaluationId)] = { row: 0, status: STATUS_AKTIF,
+                                           kunci: kunci, kunciGP: kunciGP };
       baris.push([
         String(it.evaluationId),
         String(it.timestamp),
         Number(it.pos),
         gid,
         namaResmi[gid] || String(it.guideName),
-        it.criteria.uniform ? 1 : 0,
+        normalUniform_(it.criteria.uniform),
         it.criteria.idCard ? 1 : 0,
         Math.min(REVIEW_MAKS, Math.max(0, Number(it.criteria.review) || 0)),
         Math.min(ETIKA_MAKS, Math.max(ETIKA_MIN, Number(it.criteria.etika) || 0)),
@@ -263,9 +287,18 @@ function validasi_(it, namaResmi) {
   if (!it.criteria || typeof it.criteria !== 'object') {
     errs.push('criteria wajib');
   } else {
-    ['idCard', 'uniform'].forEach(function (k) {
-      if (typeof it.criteria[k] !== 'boolean') errs.push('criteria.' + k + ' harus boolean');
-    });
+    if (typeof it.criteria.idCard !== 'boolean') errs.push('criteria.idCard harus boolean');
+    // UNIFORM kini tiga tingkat (-1 / +1 / +2), dulu Ya/Tidak.
+    // Boolean TETAP diterima supaya perangkat yang belum sempat memperbarui
+    // aplikasinya tidak ditolak permanen dan datanya hilang: true = +1
+    // "pakaian sesuai", false = -1 "pakaian tidak sesuai".
+    var uf = it.criteria.uniform;
+    if (typeof uf !== 'boolean') {
+      if (typeof uf !== 'number' || UNIFORM_NILAI.indexOf(uf) === -1) {
+        errs.push('criteria.uniform harus boolean (aplikasi lama) atau salah satu dari ' +
+                  UNIFORM_NILAI.join(', '));
+      }
+    }
     // Review sudah TIDAK diisi lewat aplikasi — kolomnya tetap ada di
     // spreadsheet dan diisi manual oleh tim. Kiriman lama yang masih
     // menyertakannya tetap diterima selama berupa angka.
@@ -292,9 +325,69 @@ function validasi_(it, namaResmi) {
  * penilaian atas guide yang baru dinonaktifkan tetap bisa masuk).
  * Disimpan sebentar di cache agar tidak dibaca ulang tiap kiriman.
  */
-/** Kunci "satu pos satu kali sehari": guideId + pos + tanggal setempat. */
+/**
+ * Kunci guide + pos + tanggal setempat.
+ *
+ * BUKAN lagi kunci keunikan — sejak penilaian dihitung per pengantaran, satu
+ * guide boleh punya beberapa baris untuk pos dan hari yang sama. Yang tersisa:
+ * dipakai KOREKSI untuk memastikan penggantinya masih atas guide, pos, dan
+ * tanggal yang sama.
+ */
 function kunciPos_(guideId, pos, tgl) {
   return String(guideId).trim() + '|' + (Number(pos) || 0) + '|' + tgl;
+}
+
+
+/** Kunci pengaman jeda: guide + pos, lintas hari (jeda dihitung dari jam). */
+function kunciGuidePos_(guideId, pos) {
+  return String(guideId).trim() + '|' + (Number(pos) || 0);
+}
+
+
+/**
+ * Cari penilaian aktif atas guide & pos yang sama yang jaraknya lebih dekat
+ * dari JEDA_PENILAIAN_MENIT. Selisih diambil mutlak supaya entri offline yang
+ * tiba belakangan ikut tertangkap.
+ * @return {{ms:number,id:string}|null}
+ */
+function bentrokJeda_(jamAktif, kunciGP, ms) {
+  var daftar = jamAktif[kunciGP];
+  if (!daftar || !daftar.length) return null;
+  var batas = JEDA_PENILAIAN_MENIT * 60000;
+  for (var i = 0; i < daftar.length; i++) {
+    if (Math.abs(daftar[i].ms - ms) < batas) return daftar[i];
+  }
+  return null;
+}
+
+
+/** Lepas satu evaluationId dari daftar jam aktif (dipakai saat koreksi). */
+function buangJamAktif_(jamAktif, kunciGP, id) {
+  var daftar = jamAktif[kunciGP];
+  if (!daftar) return;
+  for (var i = daftar.length - 1; i >= 0; i--) {
+    if (daftar[i].id === id) daftar.splice(i, 1);
+  }
+}
+
+
+/**
+ * Samakan nilai Uniform ke skala tiga tingkat (-1, +1, +2).
+ *
+ * Aturannya dipegang di sini, di pintu masuk data, dan dipakai ulang oleh rekap
+ * supaya baris lama dan baru dibaca dengan skala yang sama persis.
+ *
+ * Data lama menyimpan Ya/Tidak sebagai 1/0. Skala baru tidak pernah memakai 0,
+ * jadi 0 pasti berasal dari data lama dan berarti "tidak sesuai" = -1.
+ */
+function normalUniform_(v) {
+  if (v === true)  return 1;
+  if (v === false) return -1;
+  var n = Number(v);
+  if (!isFinite(n) || n === 0) return -1;
+  if (n < UNIFORM_MIN)  return UNIFORM_MIN;
+  if (n > UNIFORM_MAKS) return UNIFORM_MAKS;
+  return Math.round(n);
 }
 
 

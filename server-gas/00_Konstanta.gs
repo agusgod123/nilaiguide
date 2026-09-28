@@ -51,11 +51,42 @@ var STATUS_AKTIF  = 'aktif';
 var STATUS_GANTI  = 'diganti';
 
 
+// ================= Skala penilaian =================
+// UNIFORM tiga tingkat, menggantikan Ya/Tidak lama. Nilainya ikut dijumlahkan
+// ke nilai total seperti Etika, jadi "penampilan bagus" benar-benar bernilai
+// lebih, bukan sekadar label.
+var UNIFORM_NILAI = [-1, 1, 2];
+
+var UNIFORM_MIN   = -1;
+
+var UNIFORM_MAKS  = 2;
+
+var UNIFORM_LABEL = { '-1': 'pakaian tidak sesuai',
+                      '1': 'pakaian sesuai',
+                      '2': 'penampilan bagus' };
+
+// Ambang "patuh" untuk kolom persen di rekap. Skala baru punya tiga tingkat,
+// tapi kolom persen hanya mengenal patuh / tidak — +1 ke atas dihitung patuh.
+var UNIFORM_PATUH = 1;
+
+
+// Pengaman salah pencet, MENGGANTIKAN aturan "satu pos satu kali sehari".
+// Sejak penilaian dihitung per pengantaran, satu guide boleh dinilai berkali-
+// kali sehari di pos yang sama — jadi tidak ada lagi kunci harian yang menahan
+// pencetan ganda. Yang tersisa: dua penilaian atas guide dan pos yang sama
+// dalam jeda sesingkat ini hampir pasti salah pencet, bukan pengantaran baru.
+// Satu siklus antar naik-turun jauh lebih lama dari ini.
+var JEDA_PENILAIAN_MENIT = 30;
+
+
 // Syarat minimal hadir agar seorang guide masuk tabel peringkat di tab Dasbor.
 // Tanpa batas ini, guide yang kebetulan dinilai SEKALI dengan nilai sempurna
 // akan menempati peringkat 1 dan menggeser orang yang taat sepanjang bulan.
 // Yang di bawah batas tetap didaftar di bagian terpisah supaya tidak hilang.
-var MIN_HARI_PERINGKAT = 3;
+// Sejak satuannya pengantaran (bukan hari), ambangnya ikut naik: beberapa
+// pengantaran bisa terjadi dalam satu hari, sehingga "3" terlalu mudah
+// ditembus hanya dalam sehari bertugas.
+var MIN_PENGANTARAN_PERINGKAT = 5;
 
 var JML_PERINGKAT      = 10;   // berapa baris per tabel peringkat
 

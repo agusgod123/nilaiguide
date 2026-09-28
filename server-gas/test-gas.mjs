@@ -378,8 +378,13 @@ cek('Baris tersimpan di tab Evaluations', doc.getSheetByName('Evaluations').getL
 const baris = doc.getSheetByName('Evaluations').getRange(2, 1, 1, 11).getValues()[0];
 cek('Urutan kolom sesuai header (uniform, idCard, review)',
   baris[0] === 'uuid-1' && Number(baris[2]) === 1 && baris[3] === 'G-001' &&
-  baris[5] === 0 && baris[6] === 1 && baris[7] === 2,
+  baris[5] === -1 && baris[6] === 1 && baris[7] === 2,
   JSON.stringify(baris.slice(0, 8)));
+// Aplikasi lama mengirim Uniform sebagai boolean. Kirimannya TIDAK boleh
+// ditolak — kalau ditolak, entri di perangkat yang belum diperbarui tertahan
+// selamanya. false dipetakan ke -1 "pakaian tidak sesuai".
+cek('Uniform boolean dari aplikasi lama dipetakan ke skala tiga tingkat',
+  baris[5] === -1, `uniform=${baris[5]}`);
 
 r = post(contoh('uuid-1'));
 cek('Kirim ulang tidak menggandakan baris',
@@ -446,41 +451,53 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
     head3.slice(0, 4).join(' | '));
 
   // G-001 ada di baris 5 (nama paling awal secara abjad di regu A1)
-  const barisG1 = a1.getRange(5, 1, 1, 12).getValues()[0];
-  cek('Nilai harian mengambil yang paling buruk antar pos',
-    barisG1[0] === 'Gusti Alit Astawa' && barisG1[1] === 0 && barisG1[2] === 0,
-    `uniform=${barisG1[1]} id=${barisG1[2]} (pos 1 bernilai 1/1, pos 3 bernilai 0/0)`);
-  cek('Review mengambil nilai tertinggi antar pos, tidak terhapus',
-    barisG1[3] === 3, `review=${barisG1[3]}`);
+  const barisG1 = a1.getRange(5, 1, 1, 14).getValues()[0];
+  // Dulu nilai dua pos pada hari yang sama digabung dan diambil yang TERBURUK,
+  // karena baris kedua pasti koreksi. Sekarang keduanya pengantaran tersendiri,
+  // jadi angka hariannya dijumlahkan: +1 dan -1 menjadi 0, ID 1 + 0 = 1.
+  cek('Nilai harian menjumlah seluruh pengantaran, tidak lagi diambil terburuk',
+    barisG1[0] === 'Gusti Alit Astawa' && barisG1[1] === 0 && barisG1[2] === 1,
+    `uniform=${barisG1[1]} id=${barisG1[2]} (pos 1 = +1/1, pos 3 = -1/0)`);
+  cek('Review ikut dijumlah antar pengantaran, tidak terhapus',
+    barisG1[3] === 4, `review=${barisG1[3]}`);
+  cek('Cacah pengantaran dan cacah yang berpakaian sesuai ikut ditulis',
+    barisG1[5] === 2 && barisG1[6] === 1,
+    `antar=${barisG1[5]} patuh=${barisG1[6]} (dua pengantaran, satu berpakaian sesuai)`);
 
   cek('Tanggal tanpa penilaian dibiarkan kosong',
-    barisG1[5] === 1 && barisG1[6] === 1 && barisG1[7] === 0,
-    'tanggal 5: uniform=1 id=1 review=0');
+    barisG1[7] === 1 && barisG1[8] === 1 && barisG1[9] === 0,
+    `tanggal 5: uniform=${barisG1[7]} id=${barisG1[8]} review=${barisG1[9]}`);
 
   /* ---- Etika: angka -5..+5, diambil yang paling rendah ---- */
   {
     const head3b = a1.getRange(3, 1, 1, 13).getValues()[0];
-    cek('Tiap tanggal punya 4 kolom, ETIKA di urutan keempat',
+    cek('Tiap tanggal punya 6 kolom: 4 kriteria + ANTAR + PATUH',
       head3b[1] === 'UNI FORM' && head3b[2] === 'ID' &&
-      head3b[3] === 'REVIEW' && head3b[4] === 'ETIKA',
-      head3b.slice(1, 5).join(' | '));
+      head3b[3] === 'REVIEW' && head3b[4] === 'ETIKA' &&
+      head3b[5] === 'ANTAR' && head3b[6] === 'PATUH',
+      head3b.slice(1, 7).join(' | '));
 
-    // e1 (pos 1) etika 2, e2 (pos 3) etika -4 pada tanggal yang sama -> ambil -4
+    // e1 (pos 1) etika 2, e2 (pos 3) etika -4 pada tanggal yang sama -> 2 + -4
     const bEtika = a1.getRange(5, 1, 1, 9).getValues()[0];
-    cek('Etika antar pos diambil yang PALING RENDAH',
-      bEtika[4] === -4, `tanggal 3: pos 1 etika 2, pos 3 etika -4 -> ${bEtika[4]}`);
+    cek('Etika antar pengantaran dijumlah, tidak lagi diambil yang terendah',
+      bEtika[4] === -2, `tanggal 3: etika 2 dan -4 -> ${bEtika[4]}`);
     cek('Etika ikut kosong bila hari itu tidak diperiksa',
       a1.getRange(6, 5, 1, 1).getValues()[0][0] === '');
   }
 
-  const kolTotal = 1 + 2 * 4 + 1;               // 2 tanggal x 4 kolom -> TOTAL mulai kolom 10
-  const rumus = a1.getRange(5, kolTotal, 1, 4).getValues()[0];
+  const kolTotal = 1 + 2 * 6 + 1;               // 2 tanggal x 6 kolom -> TOTAL mulai kolom 14
+  const rumus = a1.getRange(5, kolTotal, 1, 7).getValues()[0];
   cek('Kolom TOTAL berisi rumus SUM yang tetap hidup',
     String(rumus[0]).indexOf('=SUM(') === 0 && String(rumus[0]).indexOf('B5') > -1,
     String(rumus[0]));
+  // RATA = dasar reward. Tetap RUMUS supaya ikut berubah saat tim membetulkan
+  // angka REVIEW yang diketik manual di tab ini.
+  cek('Blok TOTAL memuat ANTAR lalu RATA sebagai kolom terakhir',
+    String(rumus[4]).indexOf('=SUM(') === 0 && String(rumus[6]).indexOf('=IFERROR(SUM(') === 0,
+    `antar=${rumus[4]} rata=${rumus[6]}`);
 
   cek('Penilaian bulan lain tidak ikut terhitung',
-    a1.getRange(2, 1, 1, 12).getValues()[0].filter(v => String(v).indexOf('TGL') === 0).length === 2,
+    a1.getRange(2, 1, 1, 14).getValues()[0].filter(v => String(v).indexOf('TGL') === 0).length === 2,
     'hanya 2 tanggal di Juli');
 
   // Guide yang tidak pernah dinilai tetap muncul (agar terlihat siapa yang kosong)
@@ -497,16 +514,25 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
     bentrok.length === 0, bentrok.length ? bentrok.map(s => s.nama).join(', ') : 'aman');
 
   const perPos = doc.getSheetByName('Rekap per Pos 2026-07');
-  const headPos = perPos.getRange(2, 1, 1, 18).getValues()[0];
+  const LEBAR_POS = 6;                     // Antar, Uniform, ID, Review, Etika, Rata Uni
+  const KOL_POS = 2 + LEBAR_POS * 3 + 1;
+  const headPos = perPos.getRange(2, 1, 1, KOL_POS).getValues()[0];
   cek('Tab per pos memisahkan Pos 1, 2, dan 3',
-    headPos[2] === 'P1 Hadir' && headPos[7] === 'P2 Hadir' && headPos[12] === 'P3 Hadir',
+    headPos[2] === 'P1 Antar' && headPos[2 + LEBAR_POS] === 'P2 Antar' &&
+    headPos[2 + LEBAR_POS * 2] === 'P3 Antar',
     headPos.slice(2, 4).join(' | '));
+  // Kolom mutu per pos adalah pengaman: kalau Pos 1 dan Pos 3 menilai dengan
+  // standar berbeda, selisihnya harus kelihatan, bukan ditebak.
+  cek('Tiap pos melaporkan rata-rata mutu Uniform-nya sendiri',
+    headPos[7] === 'P1 Rata Uni' && headPos[KOL_POS - 1] === 'Total Antar',
+    headPos[7] + ' | ' + headPos[KOL_POS - 1]);
 
-  const barisPos = perPos.getRange(3, 1, 2, 18).getValues();
+  const barisPos = perPos.getRange(3, 1, 2, KOL_POS).getValues();
   const g1pos = barisPos.find(b => b[0] === 'Gusti Alit Astawa');
-  cek('Rincian per pos mencatat jumlah penilaian tiap pos',
-    g1pos && g1pos[2] === 1 && g1pos[7] === 1 && g1pos[12] === 1 && g1pos[17] === 3,
-    g1pos ? `P1=${g1pos[2]} P2=${g1pos[7]} P3=${g1pos[12]} total=${g1pos[17]}` : 'tidak ketemu');
+  cek('Rincian per pos mencatat jumlah pengantaran tiap pos',
+    g1pos && g1pos[2] === 1 && g1pos[2 + LEBAR_POS] === 1 &&
+    g1pos[2 + LEBAR_POS * 2] === 1 && g1pos[KOL_POS - 1] === 3,
+    g1pos ? `P1=${g1pos[2]} P2=${g1pos[2 + LEBAR_POS]} P3=${g1pos[2 + LEBAR_POS * 2]} total=${g1pos[KOL_POS - 1]}` : 'tidak ketemu');
 
   // Jalankan dua kali — tidak boleh menggandakan tab atau baris
   const jmlTabSebelum = doc.getSheets().length;
@@ -520,18 +546,18 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
     const tab = () => doc.getSheetByName('Rekap A1 2026-07');
 
     // Tim mengetik angka review di kolom REVIEW tanggal pertama (kolom D)
-    // dan pada tanggal kedua yang sel hariannya memang terisi (kolom H).
+    // dan pada tanggal kedua (kolom J — blok tanggal kini selebar 6 kolom).
     tab().getRange(5, 4, 1, 1).setValues([[7]]);
-    tab().getRange(5, 8, 1, 1).setValues([[3]]);
+    tab().getRange(5, 10, 1, 1).setValues([[3]]);
 
     sandbox.bangunRekap('2026-07');
-    const sesudah = tab().getRange(5, 1, 1, 9).getValues()[0];
+    const sesudah = tab().getRange(5, 1, 1, 11).getValues()[0];
     cek('Angka REVIEW yang diketik manual bertahan setelah rekap disusun ulang',
-      sesudah[3] === 7 && sesudah[7] === 3,
-      `tanggal 1 review=${sesudah[3]}, tanggal 2 review=${sesudah[7]}`);
+      sesudah[3] === 7 && sesudah[9] === 3,
+      `tanggal 1 review=${sesudah[3]}, tanggal 2 review=${sesudah[9]}`);
     cek('REVIEW manual tidak merusak kolom lain di barisnya',
-      sesudah[0] === 'Gusti Alit Astawa' && sesudah[1] === 0 && sesudah[2] === 0 &&
-      sesudah[4] === -4,
+      sesudah[0] === 'Gusti Alit Astawa' && sesudah[1] === 0 && sesudah[2] === 1 &&
+      sesudah[4] === -2,
       `uniform=${sesudah[1]} id=${sesudah[2]} etika=${sesudah[4]}`);
 
     // Diulang sekali lagi: nilainya harus tetap, bukan menumpuk atau hilang
@@ -541,7 +567,7 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
   }
 
   // Cap waktu di ujung kanan baris judul — pembeda rekap segar vs rekap basi
-  const jmlKolomA1 = 1 + (2 + 1) * 4;
+  const jmlKolomA1 = 1 + 2 * 6 + 7;            // 2 tanggal x 6 kolom + blok TOTAL (7)
   cek('Rekap membawa cap waktu "Diperbarui:"',
     String(a1.getRange(1, jmlKolomA1, 1, 1).getValues()[0][0]).indexOf('Diperbarui:') === 0,
     String(a1.getRange(1, jmlKolomA1, 1, 1).getValues()[0][0]));
@@ -553,7 +579,7 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
   cek('Sel gabungan sisa susunan lama dilepas sebelum rekap ditulis ulang',
     !a2.merges.some(m => m.row === 5), `${a2.merges.length} gabungan tersisa`);
 
-  /* ---- Kehadiran: satu pos bernilai satu ---- */
+  /* ---- Kehadiran: satu PENGANTARAN bernilai satu ---- */
   {
     const simpan = ev.data.slice();
     ev.data = [ev.data[0]];
@@ -561,11 +587,13 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
       ev.data.push([id, `2026-07-${String(hari).padStart(2, '0')}T${jam}:00:00.000Z`,
                     pos, gid, '?', u, i, rv, et || 0, '', '']);
 
-    // G-001 tanggal 3: DUA KALI di pos 1 (harus tetap dihitung 1) + sekali di pos 2
+    // G-001 tanggal 3: DUA pengantaran di pos 1 + satu di pos 2 -> 3 pengantaran.
+    // Dulu dua penilaian di pos yang sama dianggap koreksi dan dihitung satu;
+    // sekarang tiap penilaian adalah pengantaran tersendiri.
     B('k1', 'G-001', 1, 3, '02', 1, 1, 1);
-    B('k2', 'G-001', 1, 3, '05', 0, 1, 3);      // penilaian ulang di pos yang sama
+    B('k2', 'G-001', 1, 3, '05', -1, 1, 3);     // pengantaran kedua di pos yang sama
     B('k3', 'G-001', 2, 3, '07', 1, 1, 0);
-    // G-001 tanggal 4: tiga pos berbeda -> kehadiran 3
+    // G-001 tanggal 4: tiga pengantaran di pos berbeda
     B('k4', 'G-001', 1, 4, '02', 1, 1, 0);
     B('k5', 'G-001', 2, 4, '03', 1, 1, 0);
     B('k6', 'G-001', 3, 4, '04', 1, 1, 0);
@@ -580,16 +608,16 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
     cek('Tab kehadiran memakai satu kolom per tanggal',
       headHadir[0] === 'NAME' && headHadir[1] === 'REGU' &&
       headHadir[2] === '3-7' && headHadir[3] === '4-7' &&
-      headHadir[4] === 'TOTAL POS' && headHadir[5] === 'HARI HADIR',
+      headHadir[4] === 'TOTAL ANTAR' && headHadir[5] === 'HARI HADIR',
       headHadir.join(' | '));
 
     // Gusti Alit Astawa (G-001) ada di baris 5 — nama paling awal secara abjad
     const bH = kh.getRange(5, 1, 1, 6).getValues()[0];
-    cek('Dua penilaian di pos yang SAMA pada hari yang sama dihitung 1',
-      bH[0] === 'Gusti Alit Astawa' && bH[2] === 2,
-      `tanggal 3: pos 1 dinilai 2x + pos 2 sekali -> kehadiran ${bH[2]} (harus 2)`);
-    cek('Tiga pos berbeda pada hari yang sama dihitung 3', bH[3] === 3, `tanggal 4: ${bH[3]}`);
-    cek('TOTAL POS & HARI HADIR memakai rumus yang tetap hidup',
+    cek('Dua pengantaran di pos yang SAMA dihitung dua, bukan satu',
+      bH[0] === 'Gusti Alit Astawa' && bH[2] === 3,
+      `tanggal 3: pos 1 dua kali + pos 2 sekali -> ${bH[2]} pengantaran (harus 3)`);
+    cek('Tiga pengantaran pada hari yang sama dihitung 3', bH[3] === 3, `tanggal 4: ${bH[3]}`);
+    cek('TOTAL ANTAR & HARI HADIR memakai rumus yang tetap hidup',
       String(bH[4]).indexOf('=SUM(C5:D5)') === 0 &&
       String(bH[5]).indexOf('=COUNTIF(C5:D5,">0")') === 0,
       `${bH[4]} / ${bH[5]}`);
@@ -604,12 +632,12 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
     const fJml = kh.getRange(barisAkhir + 2, 1, 1, 6).getValues()[0];
     const fPos = kh.getRange(barisAkhir + 3, 1, 1, 6).getValues()[0];
     cek('Ada baris "JUMLAH GUIDE HADIR" di bawah tabel',
-      fJml[0] === 'JUMLAH GUIDE HADIR' && fPos[0] === 'TOTAL KEHADIRAN POS',
+      fJml[0] === 'JUMLAH GUIDE HADIR' && fPos[0] === 'TOTAL PENGANTARAN',
       `${fJml[0]} / ${fPos[0]}`);
     cek('Jumlah guide hadir per tanggal memakai COUNTIF sepanjang kolomnya',
       fJml[2] === `=COUNTIF(C5:C${barisAkhir},">0")` &&
       fJml[3] === `=COUNTIF(D5:D${barisAkhir},">0")`, fJml[2]);
-    cek('Total kehadiran pos per tanggal memakai SUM',
+    cek('Total pengantaran per tanggal memakai SUM',
       fPos[2] === `=SUM(C5:C${barisAkhir})`, fPos[2]);
     cek('Kolom penutup menghitung guide berbeda sebulan, bukan menjumlah harian',
       String(fJml[4]).indexOf('=COUNTIF(E5:E') === 0 &&
@@ -640,20 +668,26 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
 
     // Rincian per pos ikut memakai aturan yang sama
     const pp = doc.getSheetByName('Rekap per Pos 2026-07');
-    const headPP = pp.getRange(2, 1, 1, 18).getValues()[0];
-    cek('Tab per pos memakai istilah Hadir, bukan Dinilai',
-      headPP[2] === 'P1 Hadir' && headPP[17] === 'Total Kehadiran', headPP[2] + ' | ' + headPP[17]);
-    const barisPP = pp.getRange(3, 1, 3, 18).getValues()
+    const headPP = pp.getRange(2, 1, 1, KOL_POS).getValues()[0];
+    cek('Tab per pos memakai istilah Antar, bukan Hadir',
+      headPP[2] === 'P1 Antar' && headPP[KOL_POS - 1] === 'Total Antar',
+      headPP[2] + ' | ' + headPP[KOL_POS - 1]);
+    const barisPP = pp.getRange(3, 1, 3, KOL_POS).getValues()
       .find(b => b[0] === 'Gusti Alit Astawa');
-    cek('P1 Hadir menghitung HARI, bukan jumlah penilaian',
-      barisPP && barisPP[2] === 2,
-      barisPP ? `P1=${barisPP[2]} (tgl 3 dinilai 2x + tgl 4 sekali -> 2 hari)` : 'tidak ketemu');
-    cek('Nilai per pos ikut digabung dulu per hari (yang terburuk)',
-      barisPP && barisPP[3] === 1 && barisPP[4] === 2,
-      barisPP ? `P1 Uniform=${barisPP[3]} (tgl 3 -> 0, tgl 4 -> 1) ID=${barisPP[4]}` : '-');
-    cek('Total kehadiran sebulan benar',
-      barisPP && barisPP[17] === 5,
-      barisPP ? `${barisPP[17]} (tgl 3: 2 pos, tgl 4: 3 pos)` : '-');
+    cek('P1 Antar mencacah PENGANTARAN, bukan hari',
+      barisPP && barisPP[2] === 3,
+      barisPP ? `P1=${barisPP[2]} (tgl 3 dua kali + tgl 4 sekali -> 3 pengantaran)` : 'tidak ketemu');
+    // Dulu nilai per pos digabung per hari dan diambil yang terburuk; sekarang
+    // tiap pengantaran berdiri sendiri dan nilainya dijumlahkan.
+    cek('Nilai per pos menjumlah seluruh pengantaran, tidak lagi diambil terburuk',
+      barisPP && barisPP[3] === 1 && barisPP[4] === 3,
+      barisPP ? `P1 Uniform=${barisPP[3]} (+1, -1, +1 = 1) ID=${barisPP[4]}` : '-');
+    cek('Rata-rata mutu Uniform per pos dihitung dari pengantaran',
+      barisPP && Math.abs(barisPP[7] - 0.33) < 0.005,
+      barisPP ? `P1 Rata Uni=${barisPP[7]} (1 dibagi 3 pengantaran)` : '-');
+    cek('Total pengantaran sebulan benar',
+      barisPP && barisPP[KOL_POS - 1] === 6,
+      barisPP ? `${barisPP[KOL_POS - 1]} (tgl 3: 3 pengantaran, tgl 4: 3)` : '-');
 
     ev.data = simpan;
   }
@@ -768,6 +802,47 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
     /etika/.test(String(etikaLuar.rejected[0].errors)),
     JSON.stringify(etikaLuar.rejected[0] || {}));
 
+  /* ---- Uniform tiga tingkat: -1, +1, +2 ---- */
+  {
+    const kirimUni = (id, nilai) => J(doPost({ postData: { contents: JSON.stringify({
+      evaluationId: id, guideId: 'G-002', guideName: 'I Gede Astawa', pos: 3,
+      timestamp: '2026-11-0' + (id.slice(-1)) + 'T02:00:00.000Z',
+      criteria: { idCard: true, uniform: nilai },
+    }) } }));
+
+    const bagus = kirimUni('uni-2', 2);
+    cek('Uniform +2 "penampilan bagus" diterima dan tersimpan apa adanya',
+      bagus.accepted.length === 1 &&
+      ev.getRange(ev.getLastRow(), 6, 1, 1).getValues()[0][0] === 2,
+      String(ev.getRange(ev.getLastRow(), 6, 1, 1).getValues()[0][0]));
+
+    const kurang = kirimUni('uni-1', -1);
+    cek('Uniform -1 "pakaian tidak sesuai" diterima',
+      kurang.accepted.length === 1 &&
+      ev.getRange(ev.getLastRow(), 6, 1, 1).getValues()[0][0] === -1,
+      String(ev.getRange(ev.getLastRow(), 6, 1, 1).getValues()[0][0]));
+
+    // 0 BUKAN nilai yang sah pada skala baru. Itu penting: kalau 0 diterima,
+    // baris baru tidak bisa dibedakan dari baris lama, dan pemetaan
+    // "0 berarti Tidak" yang dipakai rekap jadi menebak.
+    const nol = kirimUni('uni-3', 0);
+    cek('Uniform 0 ditolak — nilai itu hanya milik data lama, bukan skala baru',
+      nol.accepted.length === 0 && nol.rejected.length === 1 &&
+      /uniform/.test(String(nol.rejected[0].errors)),
+      JSON.stringify(nol.rejected[0] || {}));
+
+    const liar = kirimUni('uni-4', 5);
+    cek('Uniform di luar tiga tingkat ditolak, bukan dipangkas diam-diam',
+      liar.rejected.length === 1, JSON.stringify(liar.rejected[0] || {}));
+  }
+
+  // Baris lama menyimpan Ya/Tidak sebagai 1/0. Rekap harus membacanya pada
+  // skala baru, kalau tidak "tidak sesuai" terhitung netral, bukan minus.
+  cek('Data lama uniform=0 dibaca sebagai -1 oleh rekap',
+    sandbox.normalUniform_(0) === -1 && sandbox.normalUniform_(1) === 1 &&
+    sandbox.normalUniform_(false) === -1 && sandbox.normalUniform_(true) === 1,
+    `0→${sandbox.normalUniform_(0)} 1→${sandbox.normalUniform_(1)}`);
+
   const etikaMinus = J(doPost({ postData: { contents: JSON.stringify({
     evaluationId: 'auto-6', guideId: 'G-002', guideName: 'I Gede Astawa', pos: 3,
     timestamp: '2026-09-13T02:00:00.000Z',
@@ -784,7 +859,7 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
     batas.accepted.length === 1 && barisBatas[7] === 20 && barisBatas[9].length === 500,
     `review=${barisBatas[7]} panjang catatan=${barisBatas[9].length}`);
 
-  /* ---- Satu pos hanya menilai satu kali per hari ---- */
+  /* ---- Pengaman jeda: berkali-kali sehari boleh, beruntun tidak ---- */
   {
     ev.data = [ev.data[0]];
     const kirim = (id, gid, pos, iso) => J(doPost({ postData: { contents: JSON.stringify({
@@ -795,21 +870,35 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
     const p1 = kirim('sp-1', 'G-001', 1, '2026-10-05T02:00:00.000Z');
     cek('Penilaian pertama di sebuah pos diterima', p1.accepted.length === 1);
 
-    // Perangkat LAIN mengirim penilaian baru untuk guide & pos yang sama
+    // INTI perubahan: guide yang sama, pos yang sama, hari yang sama — dulu
+    // ditolak mentah, sekarang diterima karena itu pengantaran berikutnya.
     const p1b = kirim('sp-2', 'G-001', 1, '2026-10-05T06:00:00.000Z');
-    cek('Perangkat lain TIDAK bisa menilai guide yang sama di pos yang sama',
-      p1b.accepted.length === 0 && p1b.rejected.length === 1 &&
-      p1b.rejected[0].sudahDinilai === true,
-      p1b.rejected[0] ? p1b.rejected[0].errors[0] : '-');
-    cek('Barisnya benar-benar tidak ikut tertulis', ev.getLastRow() === 2);
+    cek('Pengantaran berikutnya di pos yang sama pada hari yang sama DITERIMA',
+      p1b.accepted.length === 1 && ev.getLastRow() === 3,
+      p1b.rejected.length ? p1b.rejected[0].errors[0] : 'diterima');
 
-    // Pos BERBEDA harus tetap boleh
-    const p2 = kirim('sp-3', 'G-001', 2, '2026-10-05T07:00:00.000Z');
-    const p3 = kirim('sp-4', 'G-001', 3, '2026-10-05T08:00:00.000Z');
-    cek('Pos berbeda pada hari yang sama tetap boleh menilai',
-      p2.accepted.length === 1 && p3.accepted.length === 1 && ev.getLastRow() === 4);
+    // Yang tetap ditahan: dua penilaian berselang beberapa menit.
+    const cepat = kirim('sp-2b', 'G-001', 1, '2026-10-05T06:10:00.000Z');
+    cek('Penilaian beruntun dalam jeda minimum ditolak sebagai kemungkinan salah pencet',
+      cepat.accepted.length === 0 && cepat.rejected.length === 1 &&
+      cepat.rejected[0].terlaluCepat === true,
+      cepat.rejected[0] ? cepat.rejected[0].errors[0] : '-');
+    cek('Barisnya benar-benar tidak ikut tertulis', ev.getLastRow() === 3);
 
-    // Hari berikutnya, pos yang sama boleh lagi
+    // Selisihnya MUTLAK: entri offline bisa tiba belakangan dengan cap waktu
+    // lebih AWAL, dan itu pencetan ganda yang sama.
+    const mundur = kirim('sp-2c', 'G-001', 1, '2026-10-05T05:50:00.000Z');
+    cek('Cap waktu lebih awal dalam jeda yang sama juga ditolak',
+      mundur.accepted.length === 0 && mundur.rejected.length === 1,
+      mundur.rejected[0] ? mundur.rejected[0].errors[0] : '-');
+
+    // Pos BERBEDA harus tetap boleh, bahkan pada menit yang sama
+    const p2 = kirim('sp-3', 'G-001', 2, '2026-10-05T06:05:00.000Z');
+    const p3 = kirim('sp-4', 'G-001', 3, '2026-10-05T06:06:00.000Z');
+    cek('Pos berbeda tidak terkena jeda — jedanya per guide DAN per pos',
+      p2.accepted.length === 1 && p3.accepted.length === 1 && ev.getLastRow() === 5);
+
+    // Hari berikutnya jelas di luar jeda
     const besok = kirim('sp-5', 'G-001', 1, '2026-10-06T02:00:00.000Z');
     cek('Hari berikutnya pos yang sama boleh menilai lagi', besok.accepted.length === 1);
 
@@ -825,19 +914,31 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
       { evaluationId: 'sp-6', guideId: 'G-002', guideName: 'x', pos: 2,
         timestamp: '2026-10-07T02:00:00.000Z', criteria: { idCard: true, uniform: true, review: 0 } },
       { evaluationId: 'sp-7', guideId: 'G-002', guideName: 'x', pos: 2,
-        timestamp: '2026-10-07T05:00:00.000Z', criteria: { idCard: true, uniform: true, review: 0 } },
+        timestamp: '2026-10-07T02:10:00.000Z', criteria: { idCard: true, uniform: true, review: 0 } },
     ] }) } }));
-    cek('Dua entri untuk pos yang sama dalam satu kiriman: satu diterima, satu ditolak',
+    cek('Dua entri beruntun dalam SATU kiriman: satu diterima, satu ditolak',
       borong.accepted.length === 1 && borong.rejected.length === 1,
       `${borong.accepted.length} diterima, ${borong.rejected.length} ditolak`);
 
-    // Kehadiran tetap 0..3 — pos berbeda tetap menambah
+    // Berjarak cukup, keduanya sah sekalipun pos dan harinya sama
+    const borongJauh = J(doPost({ postData: { contents: JSON.stringify({ evaluations: [
+      { evaluationId: 'sp-8', guideId: 'G-006', guideName: 'x', pos: 2,
+        timestamp: '2026-10-07T02:00:00.000Z', criteria: { idCard: true, uniform: 1, review: 0 } },
+      { evaluationId: 'sp-9', guideId: 'G-006', guideName: 'x', pos: 2,
+        timestamp: '2026-10-07T04:00:00.000Z', criteria: { idCard: true, uniform: 2, review: 0 } },
+    ] }) } }));
+    cek('Dua pengantaran berjarak cukup dalam satu kiriman sama-sama diterima',
+      borongJauh.accepted.length === 2 && borongJauh.rejected.length === 0,
+      `${borongJauh.accepted.length} diterima`);
+
+    // Cacah pengantaran, bukan cacah pos: 5 Okt G-001 dinilai di pos 1 (2x),
+    // pos 2, dan pos 3 -> 4 pengantaran. Dulu angka ini mentok di 3.
     sandbox.bangunRekap('2026-10');
     const khOkt = doc.getSheetByName('Rekap Kehadiran 2026-10');
     const bOkt = khOkt.getRange(5, 1, 1, 5).getValues()[0];
-    cek('Kehadiran tetap dihitung per pos: 3 pos berbeda = 3',
-      bOkt[0] === 'Gusti Alit Astawa' && bOkt[2] === 3,
-      `5 Okt: ${bOkt[2]} (pos 1, 2, 3)`);
+    cek('Kehadiran mencacah pengantaran dan boleh melebihi jumlah pos',
+      bOkt[0] === 'Gusti Alit Astawa' && bOkt[2] === 4,
+      `5 Okt: ${bOkt[2]} (pos 1 dua kali, pos 2, pos 3)`);
 
     ev.data = [ev.data[0]];
     props.clear();
@@ -968,9 +1069,8 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
   cek('Rekap memakai nilai koreksi, bukan nilai lama',
     !!hari && hari.idCard === 0 && hari.etika === -2,
     hari ? `idCard=${hari.idCard} etika=${hari.etika}` : 'tidak ada');
-  cek('Kehadiran tetap dihitung satu, bukan dua',
-    r.kehadiran['G-003']['2032-05-06'] === 1,
-    String(r.kehadiran['G-003']['2032-05-06']));
+  cek('Baris yang diganti tidak ikut dicacah sebagai pengantaran tambahan',
+    !!hari && hari.antar === 1, hari ? String(hari.antar) : 'tidak ada');
 
   // Koreksi berantai atas baris yang sama ditolak
   const lagi = P(dasar('kor-lagi', { koreksiDari: 'kor-asli' }));
@@ -1026,15 +1126,18 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
 
   // Skenario terkendali. Tanggalnya belum dipakai blok lain, dan tiap guide
   // sengaja diberi pola berbeda supaya peringkatnya bisa diprediksi.
-  const TGL = ['2033-01-10', '2033-01-11', '2033-01-12', '2033-01-13'];
-  //  G-001 Gusti Alit Astawa   — Asing  A1 — 4 hari, taat penuh, etika +3
-  //  G-006 I Gede Dauh         — Asing  A2 — 4 hari, tidak taat, etika -4
-  //  G-005 I Gede Darta        — Domestik D2 — 3 hari, uniform saja, etika 0
-  //  G-018 I Gede Suweca       — Domestik D1 — 1 hari  → di bawah batas peringkat
+  // Enam tanggal, bukan empat: ambang peringkat kini MIN_PENGANTARAN_PERINGKAT
+  // (5 pengantaran), jadi skenario empat hari tidak akan pernah masuk tabel.
+  const TGL = ['2033-01-10', '2033-01-11', '2033-01-12',
+               '2033-01-13', '2033-01-14', '2033-01-15'];
+  //  G-001 Gusti Alit Astawa   — Asing  A1 — 6 pengantaran, taat penuh, etika +3
+  //  G-006 I Gede Dauh         — Asing  A2 — 6 pengantaran, tidak taat, etika -4
+  //  G-005 I Gede Darta        — Domestik D2 — 5 pengantaran, uniform saja
+  //  G-018 I Gede Suweca       — Domestik D1 — 1 pengantaran → di bawah ambang
   TGL.forEach((t, i) => {
     kirim(`ds-a-${i}`, 'G-001', 1, t, 1, 1, 3);
     kirim(`ds-b-${i}`, 'G-006', 1, t, 0, 0, -4);
-    if (i < 3) kirim(`ds-c-${i}`, 'G-005', 2, t, 1, 0, 0);
+    if (i < 5) kirim(`ds-c-${i}`, 'G-005', 2, t, 1, 0, 0);
     if (i < 1) kirim(`ds-d-${i}`, 'G-018', 3, t, 1, 1, 1);
   });
 
@@ -1066,16 +1169,22 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
   cek('Asing hanya menjumlah tab A1 & A2',
     rumusHadirAsing.indexOf('A1') > -1 && rumusHadirAsing.indexOf('A2') > -1 &&
     rumusHadirAsing.indexOf('D1') === -1 && rumusHadirAsing.indexOf('D2') === -1);
-  const rumusHadirDom = String(sel(barisTgl, 10));
+  // Kolom per kategori kini 10: Hadir, Antar, Uniform, ID, Patuh, % Uniform,
+  // % ID, Mutu Uni, Etika, Review. Domestik karena itu mulai di kolom 13.
+  const rumusHadirDom = String(sel(barisTgl, 13));
   cek('Domestik hanya menjumlah tab D1 & D2',
     rumusHadirDom.indexOf('D1') > -1 && rumusHadirDom.indexOf('D2') > -1 &&
     rumusHadirDom.indexOf('A1') === -1 && rumusHadirDom.indexOf('A2') === -1,
     rumusHadirDom.slice(0, 58));
-  cek('Persentase dijaga dari pembagian nol',
-    String(sel(barisTgl, 6)).indexOf('=IF(C') === 0, String(sel(barisTgl, 6)).slice(0, 30));
+  // Penyebutnya kolom ANTAR (D), bukan lagi jumlah guide (C): satu guide bisa
+  // mengantar berkali-kali sehari dan tiap pengantaran dinilai sendiri.
+  cek('Persentase dibagi jumlah PENGANTARAN dan dijaga dari pembagian nol',
+    String(sel(barisTgl, 8)).indexOf('=IF(D') === 0, String(sel(barisTgl, 8)).slice(0, 30));
   cek('Kolom persen diberi format persen, bukan 0,9333',
-    dsb.getNumberFormat(barisTgl, 6) === '0%' && dsb.getNumberFormat(barisTgl, 17) === '0%',
-    dsb.getNumberFormat(barisTgl, 6));
+    dsb.getNumberFormat(barisTgl, 8) === '0%' && dsb.getNumberFormat(barisTgl, 18) === '0%',
+    dsb.getNumberFormat(barisTgl, 8));
+  cek('Mutu Uniform bukan persen — skalanya -1..+2',
+    dsb.getNumberFormat(barisTgl, 10) === '0.00', dsb.getNumberFormat(barisTgl, 10));
 
   const barisTotal = cariBaris('TOTAL') + 1;
   cek('Ada baris penutup TOTAL sebulan', barisTotal > barisTgl &&
@@ -1086,30 +1195,37 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
   // Hari pertama: Asing = G-001 (taat penuh) + G-006 (tidak taat sama sekali)
   cek('Rumus Hadir Asing menghitung 2 guide pada hari pertama', H(barisTgl, 3) === 2,
     String(H(barisTgl, 3)));
-  cek('Rumus Uniform & ID Asing menghitung 1 dari 2',
-    H(barisTgl, 4) === 1 && H(barisTgl, 5) === 1,
-    `uniform=${H(barisTgl, 4)} id=${H(barisTgl, 5)}`);
+  cek('Kolom Antar mencacah pengantaran, bukan guide', H(barisTgl, 4) === 2,
+    String(H(barisTgl, 4)));
+  // Uniform kini bertanda: +1 untuk G-001, -1 untuk G-006, jadi jumlahnya 0.
+  cek('Rumus Uniform Asing menjumlah nilai bertanda, ID tetap cacah',
+    H(barisTgl, 5) === 0 && H(barisTgl, 6) === 1,
+    `uniform=${H(barisTgl, 5)} id=${H(barisTgl, 6)}`);
+  cek('Cacah PATUH dipisah dari jumlah mutunya', H(barisTgl, 7) === 1,
+    String(H(barisTgl, 7)));
   cek('Persentase Asing terhitung 50%',
-    Math.abs(H(barisTgl, 6) - 0.5) < 1e-9 && Math.abs(H(barisTgl, 7) - 0.5) < 1e-9,
-    `${H(barisTgl, 6)} / ${H(barisTgl, 7)}`);
+    Math.abs(H(barisTgl, 8) - 0.5) < 1e-9 && Math.abs(H(barisTgl, 9) - 0.5) < 1e-9,
+    `${H(barisTgl, 8)} / ${H(barisTgl, 9)}`);
+  cek('Mutu Uniform dibagi pengantaran, bukan jumlah guide',
+    H(barisTgl, 10) === 0, String(H(barisTgl, 10)));
   cek('Rumus Etika Asing menjumlah nilai bertanda (+3 dan -4)',
-    H(barisTgl, 8) === -1, String(H(barisTgl, 8)));
+    H(barisTgl, 11) === -1, String(H(barisTgl, 11)));
   // Domestik hari pertama: G-005 (uniform saja) + G-018 (taat penuh)
   cek('Rumus Domestik terpisah dan tidak tercampur Asing',
-    H(barisTgl, 10) === 2 && H(barisTgl, 11) === 2 && H(barisTgl, 12) === 1,
-    `hadir=${H(barisTgl, 10)} uniform=${H(barisTgl, 11)} id=${H(barisTgl, 12)}`);
+    H(barisTgl, 13) === 2 && H(barisTgl, 15) === 2 && H(barisTgl, 16) === 1,
+    `hadir=${H(barisTgl, 13)} uniform=${H(barisTgl, 15)} id=${H(barisTgl, 16)}`);
   cek('Kolom GABUNGAN menyatukan kedua kategori',
-    Math.abs(H(barisTgl, 17) - 0.75) < 1e-9 && Math.abs(H(barisTgl, 18) - 0.5) < 1e-9,
-    `uniform ${H(barisTgl, 17)} · id ${H(barisTgl, 18)}`);
+    Math.abs(H(barisTgl, 23) - 0.75) < 1e-9 && Math.abs(H(barisTgl, 24) - 0.5) < 1e-9,
+    `uniform ${H(barisTgl, 23)} · id ${H(barisTgl, 24)}`);
   // Hari keempat: G-005 & G-018 sudah tidak bertugas → Domestik kosong
   cek('Hari tanpa penilaian di satu kategori menghasilkan teks kosong, bukan #DIV/0',
-    H(barisTgl + 3, 10) === 0 && H(barisTgl + 3, 13) === '',
-    `hadir=${H(barisTgl + 3, 10)} persen="${H(barisTgl + 3, 13)}"`);
+    H(barisTgl + 5, 13) === 0 && H(barisTgl + 5, 18) === '',
+    `hadir=${H(barisTgl + 5, 13)} persen="${H(barisTgl + 5, 18)}"`);
   cek('Baris TOTAL menjumlah seluruh tanggal',
-    H(barisTotal, 3) === 8 && H(barisTotal, 4) === 4,
-    `hadir=${H(barisTotal, 3)} uniform=${H(barisTotal, 4)}`);
+    H(barisTotal, 3) === 12 && H(barisTotal, 4) === 12,
+    `hadir=${H(barisTotal, 3)} antar=${H(barisTotal, 4)}`);
   cek('Persentase pada baris TOTAL dihitung ulang, bukan dijumlah',
-    Math.abs(H(barisTotal, 6) - 0.5) < 1e-9, String(H(barisTotal, 6)));
+    Math.abs(H(barisTotal, 8) - 0.5) < 1e-9, String(H(barisTotal, 8)));
 
   /* ---- grafik ---- */
   cek('Satu grafik ketaatan terpasang', dsb.getCharts().length === 1,
@@ -1118,8 +1234,8 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
   cek('Grafiknya garis, dua seri: % Uniform dan % ID',
     g.tipe === 'LINE' && g.rentang.length === 2 && g.rentang[1].numCols === 2,
     `${g.tipe}, ${g.rentang.length} rentang`);
-  cek('Grafik memakai kolom GABUNGAN (17-18), bukan salah satu kategori',
-    g.rentang[1].col === 17, `kolom ${g.rentang[1].col}`);
+  cek('Grafik memakai kolom GABUNGAN (23-24), bukan salah satu kategori',
+    g.rentang[1].col === 23, `kolom ${g.rentang[1].col}`);
   cek('Grafik diletakkan di bawah tabel harian, tidak menimpanya',
     g.posisi.row > barisTotal, `baris ${g.posisi.row} vs total ${barisTotal}`);
 
@@ -1138,7 +1254,7 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
     for (let r = b + 2; r < dsb2.data.length; r++) {
       const nama = (dsb2.data[r] || [])[kol + 1];
       if (!nama) break;
-      out.push({ nama: String(nama), hari: (dsb2.data[r] || [])[kol + 3],
+      out.push({ nama: String(nama), antar: (dsb2.data[r] || [])[kol + 3],
                  jumlah: (dsb2.data[r] || [])[kol + 4], ukuran: (dsb2.data[r] || [])[kol + 5] });
     }
     return out;
@@ -1148,10 +1264,10 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
   cek('Tabel nilai total tertinggi dipimpin guide paling taat',
     !!tertinggi && tertinggi[0].nama === 'Gusti Alit Astawa',
     tertinggi ? `${tertinggi[0].nama} (rata ${tertinggi[0].ukuran})` : 'tabel tidak ketemu');
-  cek('Tabel memuat jumlah, rata-rata, DAN hari hadir sekaligus',
-    tertinggi[0].hari === 4 && tertinggi[0].jumlah === 4 * (1 + 1 + 3) &&
+  cek('Tabel memuat jumlah, rata-rata, DAN cacah pengantaran sekaligus',
+    tertinggi[0].antar === 6 && tertinggi[0].jumlah === 6 * (1 + 1 + 3) &&
     Math.abs(tertinggi[0].ukuran - 5) < 0.01,
-    `hari=${tertinggi[0].hari} jumlah=${tertinggi[0].jumlah} rata=${tertinggi[0].ukuran}`);
+    `antar=${tertinggi[0].antar} jumlah=${tertinggi[0].jumlah} rata=${tertinggi[0].ukuran}`);
 
   const terendah = isiTabel('NILAI TOTAL TERENDAH');
   cek('Tabel nilai total terendah dipimpin guide paling bermasalah',
@@ -1180,16 +1296,16 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
     'ETIKA TERTINGGI', 'ETIKA TERENDAH'];
   const munculDiPeringkat = semuaTabelPeringkat.some(j =>
     (isiTabel(j) || []).some(x => x.nama === 'I Gede Suweca'));
-  cek('Guide yang hadir 1 hari TIDAK menyusup ke peringkat', !munculDiPeringkat);
-  const belum = isiTabel('BELUM CUKUP HARI');
-  cek('...tapi tetap didaftar di bagian "belum cukup hari"',
+  cek('Guide dengan 1 pengantaran TIDAK menyusup ke peringkat', !munculDiPeringkat);
+  const belum = isiTabel('BELUM CUKUP PENGANTARAN');
+  cek('...tapi tetap didaftar di bagian "belum cukup pengantaran"',
     !!belum && belum.some(x => x.nama === 'I Gede Suweca'),
     belum ? belum.map(x => x.nama).join(', ') : 'tabel tidak ketemu');
 
   /* ---- review manual ikut terbaca ---- */
   const a1 = doc.getSheetByName(`Rekap A1 ${BLN}`);
   const barisGuide = a1.data.findIndex(b => String((b || [])[0] ?? '') === 'Gusti Alit Astawa') + 1;
-  // Kolom REVIEW untuk tanggal pertama: 2 + 0*4 + 2 = kolom 4
+  // Kolom REVIEW untuk tanggal pertama: 2 + 0*6 + 2 = kolom 4
   a1.getRange(barisGuide, 4).setValue(7);
   sandbox.bangunRekap(BLN);
   const dsb3 = doc.getSheetByName('Dasbor ' + BLN);
@@ -1219,9 +1335,11 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
     return out;
   };
   const puncak = isiTabel3('NILAI TOTAL TERTINGGI')[0];
+  // 6 pengantaran x (uniform 1 + ID 1 + etika 3) = 30, ditambah review manual 7.
+  // Rata-ratanya dibagi PENGANTARAN: 37 / 6.
   cek('Review manual ikut menaikkan nilai TOTAL, bukan hanya peringkat review',
-    puncak.nama === 'Gusti Alit Astawa' && puncak.jumlah === 27 &&
-    Math.abs(puncak.ukuran - 6.75) < 0.01,
+    puncak.nama === 'Gusti Alit Astawa' && puncak.jumlah === 37 &&
+    Math.abs(puncak.ukuran - 37 / 6) < 0.01,
     `jumlah=${puncak.jumlah} rata=${puncak.ukuran}`);
 
   cek('Pesan bangunRekap menyebut hasil dasbor',
