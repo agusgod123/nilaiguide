@@ -363,7 +363,9 @@ function lapAmbilGuide_(bulan) {
       nama   : String(g.guideName || '(tanpa nama)'),
       regu   : lapReguList_(g.regu),
       kategori: g.kategori || '',
-      hari: 0, uniform: 0, idcard: 0, etika: 0, review: 0, hariReview: 0,
+      // patuh WAJIB ada di sini: lapJumlahkan_ menjumlahkannya, dan satu saja
+      // guide tanpa medan ini membuat seluruh angka ringkasan jadi NaN.
+      hari: 0, uniform: 0, patuh: 0, idcard: 0, etika: 0, review: 0, hariReview: 0,
       total: 0, rataTotal: 0, taat: 0, rataEtika: 0
     };
   });

@@ -64,6 +64,14 @@ class FakeSheet {
         return out;
       },
       setValue(v) { return this.setValues([[v]]); },
+      // Pemformatan murni tampilan: cukup dikenali supaya 11_Laporan.gs bisa
+      // dijalankan utuh di sini. Yang diuji isinya, bukan rupanya.
+      setBorder() { return this; },
+      setFontFamily() { return this; },
+      setFontStyle() { return this; },
+      setVerticalAlignment() { return this; },
+      setWrap() { return this; },
+      breakApart() { return this; },
       // Sheets memperlakukan SETIAP sel di setFormulas sebagai rumus: teks biasa
       // diberi "=" di depannya lalu gagal dihitung. Ditiru di sini supaya
       // penyalahgunaan setFormulas tertangkap tes, bukan baru ketahuan di
@@ -96,6 +104,25 @@ class FakeSheet {
   setFrozenColumns(n) { this.frozenCols = n; }
   setColumnWidth(i, w) { this.widths[i] = w; }
   deleteRow(r) { this.data.splice(r - 1, 1); }
+  // Dipakai 11_Laporan.gs untuk memangkas kolom sisa agar muat satu halaman A4.
+  deleteColumns(kol, jml) {
+    this.data.forEach(b => { if (b) b.splice(kol - 1, jml); });
+  }
+  deleteRows(r, jml) { this.data.splice(r - 1, jml); }
+  getMaxColumns() {
+    return this.data.reduce((m, b) => Math.max(m, (b || []).length), 0) || 26;
+  }
+  getMaxRows() { return Math.max(this.data.length, 1); }
+  setRowHeight(i, h) { this.heights = this.heights || {}; this.heights[i] = h; return this; }
+  setRowHeights(r, jml, h) { return this; }
+  setHiddenGridlines() { return this; }
+  insertRowsAfter(r, jml) {
+    for (let i = 0; i < jml; i++) this.data.splice(r, 0, []);
+    return this;
+  }
+  getSheetId() { return this.nama.length; }
+  getName() { return this.nama; }
+  getParent() { return doc; }
   clear() { this.data = []; this.merges = []; return this; }
   clearFormats() { this.formats = {}; return this; }
   getNumberFormat(row, col) { return this.formats[`${row},${col}`] || ''; }
@@ -141,6 +168,10 @@ const sandbox = {
     flush() {},
     getSpreadsheetTimeZone: () => doc.getSpreadsheetTimeZone(),
     getUi: () => { throw new Error('tidak ada UI di lingkungan uji'); },
+    // Enum yang dipakai 11_Laporan.gs untuk garis tabel laporan cetak.
+    BorderStyle: { SOLID: 'SOLID', SOLID_THICK: 'SOLID_THICK', DASHED: 'DASHED' },
+    WrapStrategy: { WRAP: 'WRAP', OVERFLOW: 'OVERFLOW', CLIP: 'CLIP' },
+    Dimension: { ROWS: 'ROWS', COLUMNS: 'COLUMNS' },
   },
   Utilities: {
     // Menghormati zona waktu betulan, seperti Apps Script. Versi lama tes ini
@@ -1353,6 +1384,67 @@ const sesudahUji = doc.getSheetByName('Evaluations').getLastRow();
 cek('ujiCepat() bawaan berjalan & membersihkan barisnya',
   uji.indexOf('GAGAL') === -1 && sesudahUji === sebelumUji,
   `baris ${sebelumUji} → ${sesudahUji}`);
+
+/* ---------------- Laporan bulanan cetak (11_Laporan.gs) ----------------
+   Modul ini sebelumnya tidak diuji sama sekali, padahal ia MEMBACA hasil
+   08_Peringkat.gs lewat lapisan pemetaan nama medan. Kalau pemetaannya meleset
+   setelah satuan berubah jadi pengantaran, laporannya tetap tersusun rapi —
+   hanya angkanya diam-diam nol. Itu kegagalan yang paling sulit terlihat. */
+{
+  const BLN = '2034-03';
+  const P = (obj) => JSON.parse(doPost({ postData: { contents: JSON.stringify(obj) } }).getContent());
+  const kirim = (id, gid, pos, tgl, uni, idc, etika) => P({
+    evaluationId: id, guideId: gid, guideName: 'x', pos,
+    timestamp: tgl + 'T03:00:00.000Z',
+    criteria: { uniform: uni, idCard: !!idc, etika }, catatan: '',
+  });
+
+  // G-001: 6 pengantaran, seragam BAGUS (+2) tiap kali, ID selalu ada.
+  // G-006: 6 pengantaran, seragam tidak sesuai (-1), tanpa ID.
+  ['01', '02', '03', '04', '05', '06'].forEach((d, i) => {
+    kirim(`lap-a-${i}`, 'G-001', 1, `2034-03-${d}`, 2, 1, 3);
+    kirim(`lap-b-${i}`, 'G-006', 1, `2034-03-${d}`, -1, 0, -2);
+  });
+  sandbox.bangunRekap(BLN);
+
+  let gagalLap = null;
+  try { sandbox.bangunLaporan_(BLN); } catch (e) { gagalLap = e; }
+  cek('bangunLaporan_() berjalan tanpa error pada model baru',
+    !gagalLap, gagalLap ? String(gagalLap) : 'selesai');
+
+  if (!gagalLap) {
+    const namaLap = doc.getSheets().map(x => x.nama).find(n => n.indexOf('Laporan') === 0);
+    cek('Tab laporan terbentuk', !!namaLap,
+      namaLap || doc.getSheets().map(x => x.nama).join(', '));
+
+    const shLap = doc.getSheetByName(namaLap);
+    const teksLap = shLap.data.map(b => (b || []).map(v => String(v ?? '')).join('|')).join('\n');
+
+    cek('Laporan memakai istilah pengantaran, bukan guide-hari',
+      teksLap.indexOf('Jumlah pengantaran dinilai') > -1 && teksLap.indexOf('guide-hari') === -1,
+      teksLap.indexOf('Jumlah pengantaran dinilai') > -1 ? 'istilah baru dipakai' : 'masih istilah lama');
+
+    cek('Laporan melaporkan mutu berpakaian pada skala -1..+2',
+      teksLap.indexOf('Mutu berpakaian') > -1);
+
+    const cariLap = (label) => {
+      const baris = shLap.data.find(b => String((b || [])[0] ?? '').indexOf(label) === 0);
+      return baris ? baris.find((v, i) => i > 0 && v !== '' && v !== null && v !== undefined) : undefined;
+    };
+    cek('Jumlah pengantaran terbaca dari 08_Peringkat.gs, bukan nol',
+      cariLap('Jumlah pengantaran dinilai') === 12,
+      String(cariLap('Jumlah pengantaran dinilai')));
+    cek('Cacah berseragam sesuai memakai PATUH, bukan jumlah nilai Uniform',
+      cariLap('Pengantaran berseragam sesuai') === 6,
+      `${cariLap('Pengantaran berseragam sesuai')} (G-001 +2 enam kali; G-006 -1 tidak dihitung)`);
+    // Jumlah nilai Uniform = 6*(+2) + 6*(-1) = +6, jadi rata-ratanya 6/12 = 0,5.
+    // Kalau cacah patuh keliru memakai jumlah nilai, angkanya kebetulan 6 juga —
+    // karena itu mutunya diperiksa terpisah dari cacahnya.
+    const mutuLap = cariLap('Mutu berpakaian');
+    cek('Mutu berpakaian dihitung dari jumlah nilai bertanda, bukan cacah',
+      Math.abs(Number(mutuLap) - 0.5) < 0.001, String(mutuLap));
+  }
+}
 
 const gagal = hasil.filter(h => !h.ok);
 console.log(`\n${hasil.length - gagal.length}/${hasil.length} pemeriksaan lulus`);
