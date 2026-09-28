@@ -174,7 +174,7 @@ function bangunDasbor_(bulan, ringkasan, guides, infoRegu) {
       var oi = kolomHuruf_(pk + 3), op = kolomHuruf_(pk + 4);
       var oe = kolomHuruf_(pk + 8), orv = kolomHuruf_(pk + 9);
       var selA = oa + bTotal;
-      totalRumus.push(jum(oh));   // Hadir: guide-hari, bukan guide berbeda
+      totalRumus.push(jum(oh));   // Hadir: dijumlah per hari, bukan guide berbeda
       totalRumus.push(jum(oa));
       totalRumus.push(jum(ou));
       totalRumus.push(jum(oi));

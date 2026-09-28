@@ -6,7 +6,7 @@
  *
  *  TUGAS    : Hitung nilai per guide, urutkan, tulis tabel peringkat di tab Dasbor.
  *  LARANGAN : Syarat MIN_PENGANTARAN_PERINGKAT ditegakkan di sini; yang di bawah batas
- *          TIDAK dibuang, hanya dipindah ke tabel "belum cukup hari".
+ *          TIDAK dibuang, hanya dipindah ke tabel "belum cukup pengantaran".
  *
  *  Seluruh berkas .gs berbagi SATU lingkup global — tidak ada import/export.
  *  Awalan angka pada nama berkas menandakan urutan evaluasi yang diinginkan.

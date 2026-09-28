@@ -55,9 +55,9 @@ function bangunRekap(bulan) {
     var pesan = 'Rekap ' + bulan + ' selesai. ' + hasil.join(' ') +
                 ' (anggota/terisi) | tanggal terisi: ' + ringkasan.tanggal.length +
                 ' | guide dinilai: ' + nPos +
-                ' | kehadiran tercatat: ' + hadir.terisi + ' guide-hari' +
+                ' | sel kehadiran terisi: ' + hadir.terisi +
                 ' | dasbor: ' + dasbor.diperingkat + ' guide diperingkat, ' +
-                dasbor.belumCukup + ' belum cukup hari' +
+                dasbor.belumCukup + ' belum cukup pengantaran' +
                 (dasbor.grafik ? ', grafik terpasang' : ', grafik dilewati (< 2 tanggal)') +
                 peringatan;
     Logger.log(pesan);
