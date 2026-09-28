@@ -2,14 +2,18 @@
 
 Berkas ini untuk **dimuat sebagai konteks di sesi baru**. Isinya keadaan
 proyek, aturan bisnis, alur kerja, dan jebakan-jebakan yang sudah pernah
-memakan waktu. Diperbarui 26 Agustus 2026, setelah putaran perbaikan yang
-menutup hampir seluruh daftar "yang masih menggantung" dan menambah dua fitur:
-koreksi salah pencet, dan koreksi jam perangkat yang meleset.
+memakan waktu. Diperbarui **28 September 2026**, setelah dua putaran besar yang
+keduanya sudah **ter-deploy dan berjalan di produksi**:
 
-> ⚠️ **Putaran perbaikan itu BELUM ter-deploy.** Kode sudah di `main`, tapi
-> Apps Script masih versi 13 Agustus. Baca §6 sebelum men-deploy — kali ini
-> tab `Evaluations` ikut dimigrasikan, jadi urutannya lebih penting daripada
-> biasanya.
+1. **Nama guide kembar** — 15 record yang menggabungkan dua orang berbeda ke
+   satu `guideId` dipecah. Daftar guide 296 → 314.
+2. **Penilaian per pengantaran** — satuan penilaian berubah dari "satu pos satu
+   hari" menjadi per pengantaran, Uniform jadi tiga tingkat, dan aturan
+   anti-duplikat diganti pengaman jeda dua lapis.
+
+> Keduanya mengubah **aturan bisnis inti**, bukan sekadar menambah fitur. Kalau
+> Anda pernah membaca berkas ini sebelum 28 September, bagian §3 sudah tidak
+> berlaku seluruhnya — baca ulang.
 
 > Kalau ada yang bertentangan antara berkas ini dan kode, **kode yang benar**.
 > Periksa ulang sebelum mempercayai bagian mana pun di sini.
@@ -25,13 +29,18 @@ tab rekap bulanan berformat *NILAI REWARD* yang dipakai tim selama ini.
 
 | Aspek | Nilai |
 | --- | --- |
-| Repo lokal | `D:\Claude_ReviewGuide\app` |
-| GitHub | `agusgod123/penilaian-guide-besakih`, cabang `main` |
-| Hosting PWA | **Vercel** (`vercel.json`) — alamat `.vercel.app` diisi setelah deploy |
-| Spreadsheet | *Penilaian Guide Besakih — Basis Data*, fileId `1VgxMrb-NgPlaKmQf7ppd_jrKwc_6F2d9VQKwpgZ9Kec` |
+| Repo lokal | `D:\Pribadi\Nilaiguide` (Windows, Git Bash) |
+| GitHub | `agusgod123/nilaiguide`, cabang `main` |
+| Hosting PWA | **Vercel** (`vercel.json`), otomatis dari `main` — https://nilaiguide.vercel.app |
+| Spreadsheet | *Penilaian Guide Besakih — Basis Data 2026* |
 | Alamat backend | Ada di `public/config.js` (URL `/exec` Apps Script) |
 | Dependensi produksi | **Nol.** `marked` + `mermaid` hanya devDependency untuk membangun PDF |
 | Bahasa | Seluruh antarmuka, komentar kode, dan dokumen berbahasa Indonesia |
+
+⚠️ **fileId spreadsheet yang dulu tercatat di sini sudah tidak berlaku** —
+menunjuk berkas lama, bukan *Basis Data 2026* yang dipakai sekarang. Ambil id
+yang benar dari URL spreadsheet saat dibutuhkan; jangan menyalin dari dokumen
+lama mana pun.
 
 ---
 
@@ -39,12 +48,47 @@ tab rekap bulanan berformat *NILAI REWARD* yang dipakai tim selama ini.
 
 | Bagian | Keadaan |
 | --- | --- |
-| Repo | `main` memuat putaran perbaikan 26 Agustus |
-| Aplikasi live | belum ter-deploy di hosting baru — ikuti `PANDUAN-DEPLOY.md` |
-| Apps Script terpasang | **masih versi 13 Agustus** — belum tahu kolom `koreksiDari`/`status` |
-| Jumlah penilaian di spreadsheet | 970 per 13 Agustus 2026 (dipakai sungguhan di lapangan) |
+| Repo | `main` memuat seluruh putaran sampai penilaian per pengantaran |
+| Aplikasi live | https://nilaiguide.vercel.app — ter-deploy otomatis dari `main` |
+| Apps Script terpasang | versi 28 September (mengenal `JEDA_TOLAK_MENIT`) |
+| Jumlah penilaian di spreadsheet | ±2.300 baris, ±2.200 di bulan berjalan (44 diganti koreksi) |
+| Data guide | **314** · A1 113, A2 116, D1 52, D2 33 — tiap guide hanya satu regu |
 | `APP_VERSION` | `1.3.0` · service worker `besakih-guide-v1.9.0` |
-| Pengujian | 148/148 Apps Script · 144/144 aplikasi |
+| Pengujian | **177/177** Apps Script · **167/167** aplikasi |
+
+### Yang berubah pada putaran 28 September — penilaian per pengantaran
+
+Mengubah **satuan penilaian**, jadi menyentuh hampir seluruh rantai: aturan
+terima di server, agregasi, bentuk tab rekap, dasbor, laporan cetak, dan
+aplikasi. Rinciannya di §3; ringkasnya:
+
+| Hal | Ringkasnya |
+| --- | --- |
+| Satuan | Satu penilaian = satu **pengantaran**. Guide boleh dinilai berkali-kali sehari, termasuk di pos yang sama |
+| Uniform | Ya/Tidak → **tiga tingkat**: `−1` tidak sesuai, `+1` sesuai, `+2` penampilan bagus. Ikut dijumlahkan ke nilai total |
+| Anti-duplikat | "Satu pos sekali sehari" **dicabut**, diganti jeda dua lapis: server menolak < 15 menit, aplikasi bertanya 15–60 menit |
+| Pos | Hanya Pos 1 dan Pos 3 di pemilih; server tetap menerima pos 1–3 |
+| Agregasi | Tidak ada lagi "ambil yang paling buruk" — seluruh pengantaran dijumlahkan dan dicacah |
+| Peringkat | Rata-rata **per pengantaran**, `MIN_PENGANTARAN_PERINGKAT = 5` |
+| Tab rekap | Blok tanggal 4 → **6 kolom** (+ `ANTAR`, `PATUH`), blok TOTAL → 7 kolom (+ `RATA`) |
+| Dasbor | 7 → **10 kolom** per kategori |
+| Laporan cetak | Ikut satuan baru; **tesnya baru dibuat pada putaran ini** dan langsung menemukan bug NaN |
+
+### Yang berubah pada putaran 28 September — nama guide kembar
+
+15 record menggabungkan dua orang berbeda ke satu `guideId` dan menandainya
+beregu ganda (`"A1, A2"`). Karena kunci anti-duplikat server adalah `guideId`,
+dua orang bernama sama yang dinilai di pos dan hari yang sama saling
+bertabrakan — penilaian orang kedua ditolak lalu hilang tanpa jejak.
+
+Record itu dipecah jadi 31 (`G-297`…`G-312`); regu pertama mempertahankan
+`guideId` lama sehingga riwayatnya tetap menempel dan tab `Evaluations` **tidak
+perlu dimigrasikan**. Ditambah 2 guide baru → 314.
+
+Sekalian ditutup bug yang membuntukan: kartu dan chip kandidat dulu hanya
+mengirim **nama**, lalu dicocokkan ulang saat simpan. Guide bernama kembar jadi
+mustahil dinilai — pesan galat menyuruh "pilih lewat Daftar Guide", padahal
+kartunya pun hanya mengirim nama. Sekarang semuanya membawa `data-guide-id`.
 
 ### Yang berubah pada putaran penataan ulang (setelah 26 Agustus)
 
@@ -54,7 +98,7 @@ yang janggal setelah deploy, penyebabnya bisa dipisahkan.
 
 | Sebelum | Sesudah |
 | --- | --- |
-| `server-gas/Code.gs` — 2095 baris | 11 berkas bernomor, terbesar 279 baris |
+| `server-gas/Code.gs` — 2095 baris | 12 berkas bernomor (kini termasuk `11_Laporan.gs`) |
 | `public/js/app.js` — 1261 baris | 8 modul di `public/js/app/`, terbesar 271 baris |
 | Batas antar bagian = konvensi | Ditulis sebagai TUGAS + LARANGAN di kepala tiap berkas |
 | — | 4 uji struktur baru yang menjaga aturan modul (lihat §4.1) |
@@ -122,37 +166,112 @@ Aplikasi mengirim **tiga** kriteria:
 
 | Kriteria | Bentuk | Catatan |
 | --- | --- | --- |
-| **Uniform** | Ya/Tidak → `1`/`0` | Wajib dipilih |
+| **Uniform** | **Tiga tingkat**: `−1` / `+1` / `+2` | −1 pakaian tidak sesuai, +1 pakaian sesuai, +2 penampilan bagus. Wajib dipilih |
 | **ID-Card** | Ya/Tidak → `1`/`0` | Wajib dipilih |
 | **Etika** | Angka **−5 sampai +5** | `0` jawaban sah; −5 pelanggaran berat, +5 sangat baik |
+
+Nilai Uniform **ikut dijumlahkan** ke nilai total seperti Etika, jadi jumlahnya
+bisa negatif. Itu disengaja: "penampilan bagus" harus benar-benar bernilai
+lebih, bukan sekadar label.
+
+**`0` BUKAN nilai Uniform yang sah** pada skala baru — dan justru itu gunanya.
+Data lama menyimpan Ya/Tidak sebagai `1`/`0`, jadi angka `0` bisa dipakai
+sebagai penanda baris lama dan dipetakan ke `−1`. Aturannya dipegang satu
+fungsi, `normalUniform_()` di `03_Ingest.gs`, dan **rekap memakai fungsi yang
+sama** supaya baris lama dan baru terbaca dengan skala identik.
+
+**Boolean tetap diterima** dari perangkat yang belum memperbarui aplikasinya
+(`true` = +1, `false` = −1). Kalau ditolak, entrinya tertahan permanen dan
+datanya hilang — pertimbangan yang sama dengan Etika yang boleh tidak dikirim.
+
+Petugas lapangan sudah diarahkan agar Etika **tidak diisi 0**: `+1` adalah nilai
+terendah yang wajar untuk guide tanpa catatan masalah.
 
 **`review` sudah tidak diisi aplikasi.** Kolomnya tetap ada di tab
 `Evaluations` dan di rekap demi data lama, dan server masih menerimanya bila
 dikirim.
 
-### 3.2 Penggabungan bila satu guide dinilai di beberapa pos pada hari yang sama
+### 3.2 Agregasi — satuannya PENGANTARAN
 
-| Kriteria | Yang dipakai | Alasan |
-| --- | --- | --- |
-| Uniform, ID-Card | **Paling buruk** (`min`) | Ketidaksesuaian di pos mana pun tetap ketidaksesuaian |
-| Etika | **Paling rendah** (`min`) | Skalanya bertanda; −5 tidak boleh tertutup oleh +5 di pos lain |
-| Review (data lama) | Tertinggi (`max`) | Peninggalan aturan lama |
+**Satu penilaian = satu pengantaran.** Tidak ada lagi penggabungan "ambil yang
+paling buruk"; seluruh pengantaran **dijumlahkan dan dicacah**.
 
-Penggabungan dilakukan **dua tingkat**: per `(guide, pos, tanggal)` dulu, baru
-lintas pos. Tingkat pertama itulah yang membuat kolom `Pn Hadir` menghitung
-**hari**, bukan jumlah penilaian.
+> Dulu penilaian digabung ke tingkat `(guide, hari)` dan diambil yang paling
+> buruk. Itu masuk akal selama satu pos hanya boleh menilai sekali sehari,
+> karena baris kedua pasti koreksi. Sejak penilaian dihitung per pengantaran,
+> baris kedua adalah pengantaran yang benar-benar berbeda — jadi tidak boleh
+> lagi saling menimpa.
+
+`rangkumBulan_` mengembalikan tiga peta, semuanya berisi
+`{ antar, uniform, idCard, review, etika, uniformPatuh }`:
+
+| Peta | Dikelompokkan per |
+| --- | --- |
+| `harian[guideId][tgl]` | guide × tanggal — dipakai tab rekap regu & kehadiran |
+| `perPos[guideId][pos]` | guide × pos sebulan — dipakai tab Rekap per Pos |
+| `total[guideId]` | guide sebulan — dasar rata-rata per pengantaran |
+
+**Pos 1 dan Pos 3 TIDAK disambungkan** menjadi satu perjalanan. Rata-rata tidak
+peduli bagaimana penyebutnya didefinisikan asalkan konsisten, jadi
+menyambungkan keduanya tidak membuat angkanya lebih adil — hanya menambah isian
+di lapangan atau logika tersembunyi yang tidak bisa dijelaskan dari spreadsheet.
+Tiap baris tetap menyimpan pos dan jam, jadi keputusan ini bisa dihitung ulang
+dari riwayat kalau kelak berubah.
+
+**`uniformPatuh` dicacah terpisah** dari jumlah nilai Uniform. Pada skala
+−1/+1/+2 cacah patuh **tidak bisa diturunkan** dari jumlahnya: beberapa
+kombinasi berjumlah sama dengan cacah patuh berbeda. Seluruh kolom persen
+bergantung pada cacah ini.
 
 ### 3.3 Kehadiran
 
-- Kehadiran harian = **jumlah pos berbeda** yang memeriksa guide itu, bernilai **0–3**
-- Tab `Rekap Kehadiran YYYY-MM`: baris = seluruh guide aktif, kolom = tanggal
-- Ditutup dua baris rumus: `JUMLAH GUIDE HADIR` (`COUNTIF>0`) dan `TOTAL KEHADIRAN POS` (`SUM`)
+- Kehadiran harian = **berapa pengantaran** guide itu dinilai hari tersebut.
+  **Tidak ada batas atas** — dulu 1–3, mentok di jumlah pos.
+- Tab `Rekap Kehadiran YYYY-MM`: baris = seluruh guide aktif, kolom = tanggal.
+  **Di sinilah cacah harian dibaca** — tab rekap regu hanya memuat jumlah
+  nilainya, jadi tanpa tab ini angka "4" di kolom UNIFORM tidak bisa dibedakan
+  antara dua pengantaran bagus atau empat pengantaran biasa.
+- Ditutup dua baris rumus: `JUMLAH GUIDE HADIR` (`COUNTIF>0`) dan
+  `TOTAL PENGANTARAN` (`SUM`)
 
-### 3.4 Satu pos menilai satu guide sekali per hari
+### 3.4 Pengaman salah pencet — jeda dua lapis
 
-Ditegakkan **di server** saat menulis, bukan di aplikasi — hanya server yang
-memegang data seluruh pos. Kiriman kedua dengan `(guideId, pos, tanggal)` yang
-sama **ditolak**. Pos lain tetap boleh menilai guide itu pada hari yang sama.
+Aturan "satu pos menilai satu guide sekali per hari" **sudah dicabut**. Guide
+yang sama boleh dinilai berkali-kali sehari, termasuk di pos yang sama — itu
+memang pengantaran berbeda. Yang tersisa hanya penjagaan jarak:
+
+| Jarak dari penilaian aktif atas guide & pos yang sama | Perilaku |
+| --- | --- |
+| `< JEDA_TOLAK_MENIT` (15) | **Server menolak.** Aplikasi menahannya lebih dulu supaya formulir tidak terlanjur diisi; tombol "lanjutkan" sengaja **tidak** muncul, karena kirimannya pasti gagal |
+| 15–60 menit (`JEDA_PERINGATAN_MENIT`) | **Aplikasi bertanya.** Petugas menekan "Ya, ini pengantaran berikutnya" dan kirimannya diteruskan. Server menerima |
+| `> 60` menit | Lewat tanpa suara |
+
+- Jedanya **per guide DAN per pos** (`kunciGuidePos_`). Pos berbeda tidak pernah
+  saling menghalangi, berapa pun jaraknya.
+- Selisih diambil **mutlak**: entri offline bisa tiba belakangan dengan cap
+  waktu lebih awal, dan itu pencetan ganda yang sama.
+- Ambang tolak ditegakkan **di server** karena hanya server yang tahu apa yang
+  baru dicatat perangkat lain di pos yang sama. Ambang peringatan hanya hidup di
+  aplikasi dan hanya melihat data perangkat itu sendiri — lubang ini disengaja;
+  yang menjaga lintas perangkat tetap lapisan server.
+- Konstanta kembar di `public/js/db.js` **wajib sama** dengan server. Kalau
+  aplikasi lebih longgar, staff baru tahu kirimannya ditolak setelah formulir
+  terlanjur diisi; kalau lebih ketat, ia menahan penilaian yang sah.
+- Persetujuan petugas terikat pada **satu `evaluationId`**, dan hangus begitu
+  guide atau pos berganti.
+
+> ⚠️ Kedua angka ini masih **tebakan**. Lama satu siklus antar naik-turun belum
+> pernah terukur, karena aturan lama melarang penilaian kedua di pos yang sama
+> sehingga datanya tidak ada. **Setel ulang setelah Oktober 2026.**
+
+`kunciPos_` (guide + pos + tanggal) **bukan lagi kunci keunikan** — satu guide
+boleh punya beberapa baris untuk pos dan hari yang sama. Fungsinya tinggal satu:
+memastikan koreksi masih menunjuk guide, pos, dan tanggal yang sama.
+
+**Pos:** pengantaran dinilai di **Pos 1 dan Pos 3 saja**. Pos 2 dilepas dari
+pemilih aplikasi, tapi server **tetap menerima pos 1–3** supaya entri lama di
+antrean perangkat tidak tertahan selamanya dan data historis Pos 2 tetap
+terbaca rekap.
 
 Kiriman ulang dengan `evaluationId` yang **sama** tetap dijawab
 `accepted duplicate` — kalau ditolak, antrean aplikasi macet selamanya.
@@ -182,9 +301,13 @@ Yang ditegakkan server:
   hari yang sama — nilai ganda, lebih buruk daripada koreksi yang gagal.
 
 Cap waktu penilaian koreksi **mengikuti penilaian aslinya**, bukan waktu
-koreksi dibuat. Kunci "satu pos sekali sehari" memakai tanggal, jadi koreksi
-yang dibuat tepat lewat tengah malam akan ditolak kalau diberi cap waktu baru.
-Kapan koreksinya benar-benar masuk tetap tercatat di kolom `receivedAt`.
+koreksi dibuat. Koreksi hanya sah untuk tanggal yang sama, jadi koreksi yang
+dibuat tepat lewat tengah malam akan ditolak kalau diberi cap waktu baru. Kapan
+koreksinya benar-benar masuk tetap tercatat di kolom `receivedAt`.
+
+Baris yang sudah ditandai `diganti` **dilepas dari daftar jam aktif**, sehingga
+tidak lagi memicu pengaman jeda — koreksi menggantikan penilaian itu, bukan
+menambah pengantaran baru.
 
 Dari aplikasi, **hanya penilaian hari ini** yang bisa dibetulkan. Hari yang
 sudah lewat lewat admin di spreadsheet — rekapnya biasanya sudah dilaporkan.
@@ -226,14 +349,19 @@ dengan tab rekap lainnya.
 
 Sengaja begitu, karena kolom REVIEW **diketik manual** di tab rekap regu —
 ringkasan harian harus ikut berubah begitu tim memperbaikinya, tanpa menunggu
-rekap disusun ulang. Kolomnya: Tanggal, Hari, lalu tujuh kolom untuk ASING
-(A1+A2) dan tujuh untuk DOMESTIK (D1+D2) — Hadir, Uniform, ID, % Uniform, % ID,
-Etika, Review — ditutup dua kolom GABUNGAN (% Uniform, % ID) yang dipakai grafik.
+rekap disusun ulang. Kolomnya: Tanggal, Hari, lalu **sepuluh** kolom untuk ASING
+(A1+A2) dan sepuluh untuk DOMESTIK (D1+D2) — Hadir, **Antar**, Uniform, ID,
+**Patuh**, % Uniform, % ID, **Mutu Uni**, Etika, Review — ditutup dua kolom
+GABUNGAN (% Uniform, % ID) yang dipakai grafik.
 
-> Guide yang merangkap Asing **dan** Domestik terhitung di **kedua** kategori,
-> jadi Asing + Domestik bisa lebih besar dari jumlah guide sesungguhnya. Ada 15
-> guide seperti itu. Persentase GABUNGAN nyaris tidak terpengaruh karena mereka
-> terhitung dua kali di pembilang maupun penyebut.
+- **Penyebut seluruh rata-rata adalah `Antar`**, bukan jumlah guide: satu guide
+  bisa mengantar berkali-kali sehari dan tiap pengantaran dinilai sendiri.
+- `% Uniform` dihitung dari kolom `Patuh`, bukan jumlah nilai Uniform.
+- `Mutu Uni` berformat `0.00` (skala −1..+2), **bukan persen** — kolom persen
+  tidak bisa membedakan "sesuai" dari "penampilan bagus".
+
+> Sejak record beregu ganda dipecah, **tidak ada lagi guide yang terhitung di
+> dua kategori**. Sub ASING + Sub DOMESTIK kini tepat sama dengan seluruh guide.
 
 **Grafik**: satu grafik garis, dua seri — % Uniform sesuai dan % ID-Card sesuai
 per hari, diambil dari kolom GABUNGAN.
@@ -242,29 +370,74 @@ per hari, diambil dari kolom GABUNGAN.
 
 | Tabel | Diurut memakai |
 | --- | --- |
-| Nilai total tertinggi / terendah | rata-rata (Uniform + ID + Etika + Review) per hari |
-| Paling taat / paling tidak taat berpakaian & ID | (Uniform + ID) ÷ (2 × hari hadir) |
-| Etika tertinggi / terendah | rata-rata etika per hari (bertanda, boleh minus) |
+| Nilai total tertinggi / terendah | rata-rata (Uniform + ID + Etika + Review) **per pengantaran** |
+| Paling taat / paling tidak taat berpakaian & ID | (**cacah patuh** + ID) ÷ (2 × pengantaran) |
+| Etika tertinggi / terendah | rata-rata etika per pengantaran (bertanda, boleh minus) |
 | Menerima review paling banyak | jumlah review |
 
-Tiap tabel menampilkan **jumlah, rata-rata, dan hari hadir** sekaligus: jumlah
-untuk reward berbasis akumulasi, rata-rata untuk membandingkan antar guide.
-Pengurutannya memakai rata-rata — pakai jumlah mentah, dan yang hadir 20 hari
-otomatis mengalahkan yang hadir 3 hari, sehingga peringkatnya sebenarnya
-mengukur kerajinan hadir, bukan ketaatan.
+Tiap tabel menampilkan **jumlah, rata-rata, dan cacah pengantaran** sekaligus:
+jumlah untuk menelusuri angkanya ke tab rekap, rata-rata untuk membandingkan
+antar guide.
 
-**Syarat minimal hadir `MIN_HARI_PERINGKAT = 3` hari.** Tanpa itu, guide yang
-kebetulan dinilai sekali dengan nilai sempurna menempati peringkat 1. Yang di
-bawah batas tetap didaftar di bagian "belum cukup hari" supaya tidak hilang.
+**Pembaginya PENGANTARAN, bukan hari.** Banyaknya pengantaran ditentukan urutan
+giliran, bukan kualitas guide-nya — jadi reward yang disandarkan pada jumlah
+akan memihak guide yang kebagian giliran lebih banyak.
+
+**Ketaatan memakai CACAH patuh**, bukan jumlah nilai Uniform. Pada skala
+−1/+1/+2 penjumlahan bisa melampaui atau turun di bawah rentang 0–100%.
+
+**Syarat minimal `MIN_PENGANTARAN_PERINGKAT = 5` pengantaran** (dulu 3 hari).
+Dengan beberapa pengantaran per hari, ambang 3 terlalu mudah ditembus hanya
+dalam sehari bertugas. Yang di bawah batas tetap didaftar di bagian "belum
+cukup pengantaran" supaya tidak hilang.
 
 Peringkat **review** tidak memakai syarat itu: review diketik manual dan tidak
 terikat kehadiran, jadi seluruh guide dengan review > 0 ikut diperingkat.
 
+### 3.7b Bentuk tab rekap regu
+
+**Blok tanggal selebar 6 kolom**: `UNI FORM · ID · REVIEW · ETIKA · ANTAR · PATUH`
+(dulu 4). Angka hariannya **JUMLAH seluruh pengantaran hari itu**, bukan satu
+nilai.
+
+**Blok TOTAL selebar 7 kolom**: enam SUM + `RATA`. `RATA` tetap **rumus** supaya
+ikut berubah begitu tim membetulkan angka REVIEW yang diketik manual.
+
+Tab **Rekap per Pos** punya kolom `P{n} Rata Uni` per pos. Itu **pengaman**:
+sejak tiap penilaian dihitung sendiri, guide yang lebih sering ketemu satu pos
+akan condong ke standar pos itu. Kalau Pos 1 dan Pos 3 menilai dengan ukuran
+berbeda — misalnya seragam sudah lusuh saat sampai Pos 3 — selisihnya harus
+kelihatan, bukan ditebak.
+
+### 3.7c Laporan bulanan cetak
+
+`11_Laporan.gs` disusun **dari menu**, bukan oleh trigger, dan membaca hasil
+`08_Peringkat.gs` lewat lapisan pemetaan nama medan (`LAP_PETA`). Kalau
+pemetaannya meleset, laporannya tetap tersusun rapi dan **hanya angkanya yang
+diam-diam salah** — kegagalan yang paling sulit terlihat.
+
+Modul ini sebelumnya **tidak diuji sama sekali**. Tesnya dibuat pada putaran 28
+September dan langsung menemukan dua bug yang sudah sampai ke laporan produksi
+(lihat §7).
+
 ### 3.8 Data guide
 
-296 guide. Kategori `Asing`/`Domestik`, regu `A1`, `A2`, `D1`, `D2`. Satu guide
-boleh merangkap beberapa regu (`A1, D1`). Dinonaktifkan lewat kolom
-`aktif = FALSE`, tidak dihapus.
+**314 guide** — A1 113, A2 116, D1 52, D2 33. Kategori `Asing`/`Domestik`, regu
+`A1`, `A2`, `D1`, `D2`. Dinonaktifkan lewat kolom `aktif = FALSE`, tidak dihapus.
+
+**Tiap guide kini hanya masuk SATU regu.** Kolom `regu` masih bisa memuat daftar
+berkoma dan kodenya masih mendukungnya (dijaga tes), tapi datanya tidak lagi
+memakai itu — 15 record yang dulu beregu ganda ternyata orang berbeda bernama
+sama, dan sudah dipecah.
+
+**`guideId` adalah kunci, bukan nama.** Kunci anti-duplikat memakai `guideId`,
+dan nama ditimpa dari tab `Guides` saat disimpan — jadi **memperbaiki ejaan nama
+sama sekali tidak menyentuh riwayat**.
+
+Nama kembar **seregu** diberi pembeda dalam kurung, karena regu tidak bisa
+memisahkan mereka: `I Nyoman Darta (Angsoka)`/`(Kidul)`,
+`I Nyoman Sandi Yasa (A)`/`(B)`, `I Wayan Wirya (A)`/`(B)`. Nama kembar **beda
+regu** dibiarkan bersih — UI membawa `guideId`.
 
 ---
 
@@ -272,8 +445,8 @@ boleh merangkap beberapa regu (`A1, D1`). Dinonaktifkan lewat kolom
 
 ```
 HP staff (PWA)  ──POST──►  Apps Script /exec  ──►  Spreadsheet
-   IndexedDB               (doPost menolak            tab Evaluations
-   terenkripsi              duplikat pos)                  │
+   IndexedDB               (doPost menegakkan         tab Evaluations
+   terenkripsi              jeda tolak)                    │
    AES-256-GCM                                    trigger tiap 5 menit
                                                           ▼
                                                    tab Rekap A1/A2/D1/D2,
@@ -301,16 +474,17 @@ selesai ditulis ulang.
 | `public/js/app/07-mulai.js` | Binding event, langganan Sync, `init()` | Memuat logika bisnis |
 | `public/sw.js` | Cache app shell | Mencegat permintaan lintas host |
 | `server-gas/00_Konstanta.gs` | Nama tab, indeks kolom, batas nilai, nama hari/bulan | Logika apa pun |
-| `server-gas/01_DataGuide.gs` | Data awal daftar guide (296 baris) | Logika apa pun |
+| `server-gas/01_DataGuide.gs` | Data awal daftar guide (314 baris) | Logika apa pun |
 | `server-gas/02_Util.gs` | Akses spreadsheet, JSON, penamaan tab, tanggal WITA | Tahu aturan penilaian |
-| `server-gas/03_Ingest.gs` | doGet/doPost, validasi, idempotensi, koreksi | Menyusun rekap |
+| `server-gas/03_Ingest.gs` | doGet/doPost, validasi, idempotensi, jeda, koreksi, `normalUniform_` | Menyusun rekap |
 | `server-gas/04_Setup.gs` | `setup()`, migrasi Evaluations, isi ulang Guides | Dipanggil trigger |
 | `server-gas/05_Ringkasan.gs` | Baca Guides & Evaluations, rangkum, baca REVIEW manual | Menulis ke tab |
 | `server-gas/06_RekapRegu.gs` | Tab Rekap A1/A2/D1/D2, mengembalikan `tanggalList` | Menebak nomor kolom |
 | `server-gas/07_RekapLain.gs` | Rekap Kehadiran & Rekap per Pos | — |
-| `server-gas/08_Peringkat.gs` | Hitung nilai per guide, urutkan, tulis tabel peringkat | Membuang yang belum cukup hari |
+| `server-gas/08_Peringkat.gs` | Hitung nilai per guide, urutkan, tulis tabel peringkat | Membuang yang belum cukup pengantaran |
 | `server-gas/09_Dasbor.gs` | Ringkasan harian (rumus) + grafik ketaatan | Jalan sebelum tab regu final |
 | `server-gas/10_Trigger.gs` | Orkestrasi urutan rekap, trigger, menu | Menyusun rekap dari doPost |
+| `server-gas/11_Laporan.gs` | Laporan bulanan cetak A4, dipanggil dari menu | Menghitung ulang logika bisnis sendiri |
 | `server/` | Backend REST alternatif tanpa dependensi | Menyimpang dari aturan backend Apps Script |
 
 Kolom `status` di tab `Evaluations`: `aktif` (angka yang berlaku) atau
@@ -338,7 +512,7 @@ berikut — dan masing-masing punya tes yang menjaganya.
 
 | Aturan | Kenapa | Dijaga oleh |
 | --- | --- | --- |
-| Tidak ada nama top-level kembar antar berkas | Satu lingkup global: yang kembar saling menimpa **tanpa peringatan**. Dalam satu berkas hal itu terlihat mata; dalam 11 berkas tidak. | `test-gas.mjs`, `app.test.mjs` |
+| Tidak ada nama top-level kembar antar berkas | Satu lingkup global: yang kembar saling menimpa **tanpa peringatan**. Dalam satu berkas hal itu terlihat mata; dalam 12 berkas tidak. | `test-gas.mjs`, `app.test.mjs` |
 | Tidak ada kode top-level yang dijalankan saat berkas dimuat (selain literal) | Kalau ada, urutan evaluasi berkas jadi menentukan — dan urutan itu mudah berubah tanpa sengaja. | `test-gas.mjs` |
 | State yang berubah hanya hidup di `App.state` | Dua modul yang masing-masing memegang salinannya sendiri akan berselisih diam-diam. | `app.test.mjs` |
 | `index.html` dan `sw.js` memuat daftar modul yang sama | Kalau `sw.js` tertinggal satu modul, HP offline menerima aplikasi yang separuh modulnya hilang — dan hanya ketahuan di lapangan. | `app.test.mjs` |
@@ -356,17 +530,24 @@ bukan hasil gabungannya, supaya kesalahan tertangkap di sumber.
 ## 5. Perintah kerja
 
 ```bash
-node server-gas/test-gas.mjs      # uji logika Apps Script tanpa Google (148 pemeriksaan)
-node test/app.test.mjs            # uji aplikasi via jsdom (144 pemeriksaan)
+node server-gas/test-gas.mjs      # uji logika Apps Script tanpa Google (177 pemeriksaan)
+node test/app.test.mjs            # uji aplikasi via jsdom (167 pemeriksaan)
 node server/server.js             # backend lokal (tidak lagi wajib untuk tes)
+npm run build:gas                 # gabung 12 berkas .gs -> Code.gs
 npm run docs:pdf                  # bangun ulang PDF dari Markdown
+```
+
+Di Git Bash (Windows), menyalin `Code.gs` ke clipboard tanpa membukanya:
+
+```bash
+cat server-gas/Code.gs | clip
 ```
 
 Rangkaian uji aplikasi **menyalakan servernya sendiri** di port acak dengan
 folder data sementara, lalu mematikannya lagi. Itu jadi keharusan begitu server
-REST ikut menegakkan "satu pos sekali sehari": run kedua pada hari yang sama
-akan bertabrakan dengan data run pertama dan gagal karena sisa data, bukan
-karena kodenya salah.
+REST ikut menegakkan aturan anti-duplikat: run kedua pada hari yang sama akan
+bertabrakan dengan data run pertama dan gagal karena sisa data, bukan karena
+kodenya salah.
 
 Untuk menguji server yang sedang berjalan, `BASE` tetap dihormati:
 `BASE=http://localhost:3199 node test/app.test.mjs`. Server sendiri menerima
@@ -394,32 +575,35 @@ harus ikut diganti.
 `setup()` memasang trigger sendiri dan menjalankan migrasi kolom, jadi jangan
 dilewat.
 
-### Deploy putaran 26 Agustus — urutannya wajib
+### Tiga hal yang mudah menjebak
 
-Putaran ini **mengubah bentuk tab `Evaluations`** (menambah kolom `koreksiDari`
-dan `status`), jadi lebih berhati-hati daripada biasanya.
+1. **`setup()` TIDAK menulis ulang tab Guides** kalau tab itu sudah terisi dan
+   headernya sesuai skema. Untuk memperbarui daftar guide, jalankan
+   **`resetGuides()`** — dan itu **tidak menyentuh tab Evaluations** sama
+   sekali. Menjalankan `setup()` lalu heran kenapa daftarnya tidak berubah
+   sudah pernah terjadi.
+2. **Menu menjalankan kode yang TERSIMPAN di editor**, bukan versi yang
+   di-deploy. Perubahan yang hanya menyentuh rekap atau laporan cukup Save;
+   "New version" hanya perlu kalau aturan terima di `/exec` berubah.
+3. **Bangun `Code.gs` dari cabang yang benar.** `npm run build:gas` membangun
+   dari berkas di folder saat itu. Kalau perbaikan ada di cabang sementara Anda
+   sedang di `main`, `git pull` **tidak** membawanya — `Code.gs` yang terbangun
+   adalah kode lama, dan gejalanya menyesatkan: bug yang "sudah diperbaiki"
+   tetap muncul. **Merge dulu, baru build.** Sudah memakan waktu sekali.
 
-1. **Salin dulu spreadsheetnya** — File → Make a copy. `migrasiEvaluations_`
-   membaca seluruh baris, mengosongkan tab, lalu menulisnya kembali. Dengan 970+
-   baris data lapangan sungguhan, salinan cadangan itu murah dan satu-satunya
-   jaring pengaman kalau migrasi berhenti di tengah.
-2. Kirim berkas `.gs` (clasp push) atau tempel hasil `npm run build:gas`, simpan,
-   jalankan `setup()`.
-   Nilai kembaliannya menyebut hasil migrasi. Periksa tab `Evaluations`: jumlah
-   barisnya harus sama seperti sebelumnya, dengan dua kolom baru di kanan dan
-   kolom `status` berisi `aktif` untuk semua baris lama.
-3. Deploy → Manage deployments → Edit → **New version**.
-4. Pastikan backend sudah versi baru dengan uji tulis (§6 di bawah) — balasannya
-   harus memuat `serverTime`.
-5. Baru `git push origin main`.
+### Urutan saat aturan terima berubah
 
-Kalau nomor 5 dijalankan lebih dulu: aplikasi di HP akan mengirim `koreksiDari`
-ke backend lama yang tidak mengenalnya. Backend lama mengabaikan kolom itu dan
-memperlakukan koreksinya sebagai penilaian biasa, lalu menolaknya karena aturan
-satu-pos-sekali-sehari. **Penilaian aslinya tidak hilang** dan penilaian biasa
-tetap jalan seperti sebelumnya — yang rusak hanya fitur koreksinya, dan setelah
-6 penolakan entri koreksi itu akan "ditahan" (bisa dikirim ulang dari layar
-Riwayat setelah backend diperbarui).
+Kalau kontrak kriteria atau aturan anti-duplikat berubah, **Apps Script dulu,
+baru merge ke `main`.** Kalau dibalik, aplikasi di HP memakai aturan baru
+sementara server masih yang lama, dan kirimannya ditolak. Penilaiannya tidak
+hilang — entri tertahan di antrean dan terkirim sendiri setelah backend
+diperbarui — tapi staff mengira aplikasinya rusak.
+
+> Arsip: putaran 26 Agustus dulu mengubah bentuk tab `Evaluations` (menambah
+> kolom `koreksiDari` dan `status`) dan karena itu butuh salinan spreadsheet
+> lebih dulu. Putaran-putaran sesudahnya **tidak** memigrasikan `Evaluations`
+> lagi — pemecahan guide kembar sengaja mempertahankan `guideId` lama justru
+> supaya migrasi tidak diperlukan.
 
 ### Memeriksa versi backend yang terpasang
 
@@ -430,7 +614,7 @@ Redirect Apps Script harus diikuti manual:
 URL="<alamat /exec>"
 LOC=$(curl -s -o /dev/null -D - -X POST "$URL" \
   -H "Content-Type: text/plain;charset=utf-8" \
-  --data-binary '{"evaluationId":"probe","guideId":"G-001","guideName":"x","pos":9,"timestamp":"2026-08-13T02:00:00.000Z","criteria":{"uniform":true,"idCard":true,"etika":99}}' \
+  --data-binary '{"evaluationId":"probe","guideId":"G-001","guideName":"x","pos":9,"timestamp":"2026-08-13T02:00:00.000Z","criteria":{"uniform":0,"idCard":true,"etika":99}}' \
   | grep -i "^location:" | tr -d '\r' | sed 's/^[Ll]ocation: //')
 curl -s "$LOC"
 ```
@@ -441,6 +625,12 @@ tertulis**. Yang dibaca adalah daftar `errors`-nya:
 - menyebut `criteria.review harus angka >= 0` → versi **13 Agustus atau lebih lama**
 - menyebut `criteria.etika harus angka antara -5 dan 5` → versi **13 Agustus**
 - balasannya memuat **`serverTime`** → versi **26 Agustus** (yang mengenal koreksi)
+- menyebut **`salah satu dari -1, 1, 2`** → versi **28 September** (Uniform tiga
+  tingkat). Versi sebelumnya berbunyi `criteria.uniform harus boolean`.
+
+Cara paling cepat dari sisi spreadsheet: buka tab `Rekap A1 <bulan>`, lihat
+baris 3. Kalau setelah `ETIKA` ada kolom `ANTAR` dan `PATUH`, kode barunya sudah
+jalan. Cara lain: cari `JEDA_TOLAK_MENIT` di editor Apps Script.
 
 Isi spreadsheet juga bisa dibaca lewat MCP Google Drive (`read_file_content`
 dengan fileId di §1) — berguna untuk memastikan rekap benar-benar terisi.
@@ -465,6 +655,22 @@ dengan fileId di §1) — berguna untuk memastikan rekap benar-benar terisi.
    yang sedang aktif.
 6. **Locale proyek Apps Script berbahasa Inggris** — cap waktu berbunyi
    "3 Aug 2026", bukan "3 Agu". Kosmetik, belum diperbaiki.
+6a. **NaN masuk ke Sheets sebagai `#NUM!`.** Satu guide terdaftar yang belum
+   pernah dinilai, dengan satu medan kurang di objek kerangkanya, sudah cukup
+   membuat SELURUH angka ringkasan laporan rusak — dan dari 314 guide biasanya
+   lebih separuh belum dinilai. Tiap medan yang dijumlahkan `lapJumlahkan_`
+   **wajib** ada di kerangka `lapAmbilGuide_`. Pernah terjadi nyata, dan sempat
+   sampai ke laporan produksi.
+6b. **Cacah patuh TIDAK bisa diturunkan dari jumlah nilai Uniform.** Pada skala
+   −1/+1/+2 beberapa kombinasi berjumlah sama dengan cacah patuh berbeda.
+   Karena itu blok tanggal punya kolom `PATUH` sendiri. Kolom yang keliru
+   memakai jumlah nilai sebagai cacah pernah menghasilkan "Seragam sesuai
+   −1201" di laporan produksi.
+6c. **Lebar blok tanggal pernah berubah** (4 → 6 kolom). `bacaReviewManual_`
+   karena itu **memindai seluruh kolom** mencari penanda `TGL:`, bukan melompat
+   selebar blok tetap — tab bulan lama masih memakai lebar lama, dan REVIEW
+   hanya ada di tab itu, diketik tangan oleh tim. Salah baca berarti angkanya
+   **HILANG** saat tab disusun ulang.
 
 ### Aplikasi
 
@@ -507,15 +713,39 @@ Aplikasinya tidak terpengaruh — di browser keduanya memang serealm.
     data tertentu. Blok baru yang menambah data taruh di **akhir** berkas, dan
     pakai guide/pos/tanggal yang belum dipakai blok lain.
 16. **Menambah kolom menggeser seluruh indeks** di tes rekap. Tiap tanggal kini
-    4 kolom (UNI FORM, ID, REVIEW, ETIKA).
+    **6 kolom** (UNI FORM, ID, REVIEW, ETIKA, ANTAR, PATUH) dan blok TOTAL 7.
+16a. **Tes yang datanya kebetulan menyamarkan bug tidak menangkap apa pun.**
+    Pernah terjadi: cacah patuh dan jumlah nilai Uniform kebetulan sama besar
+    di data uji, jadi kolom yang keliru memakai jumlah nilai tetap lolos — dan
+    bugnya baru ketahuan di laporan sungguhan. Pilih data uji yang membuat
+    kedua besaran **berbeda**, lalu buktikan tesnya gagal kalau bug itu
+    dikembalikan.
+16b. **Tes yang dibungkus `if` bisa diam-diam berhenti jalan** begitu contohnya
+    hilang dari data, tanpa satu pun kegagalan. Setelah perubahan besar,
+    bandingkan **daftar label tes** sebelum dan sesudah; yang hilang harus
+    semuanya disengaja. Sudah menangkap dua kasus nyata.
+16c. **`11_Laporan.gs` dulu tidak diuji sama sekali.** Tiruan `FakeSheet` perlu
+    dilengkapi (`deleteColumns`, `insertRowsAfter`, `setBorder`,
+    `SpreadsheetApp.BorderStyle`, dan kawan-kawan) agar modul itu bisa
+    dijalankan utuh. Pemformatan murni tampilan cukup dikenali, tidak diperiksa
+    — yang diuji isinya.
 17. **Tiruan `Utilities.formatDate` untuk pola `MMM` memakai bulan berbahasa
     Inggris**, meniru locale proyek Apps Script. Jangan "diperbaiki" jadi
     bahasa Indonesia — justru itu yang membuat kode yang menumpang locale
     ketahuan salah.
 18. **Rangkaian uji aplikasi tidak boleh menumpang server yang datanya
-    menetap.** Sejak server REST menegakkan satu-pos-sekali-sehari, run kedua
-    pada hari yang sama akan bertabrakan dengan data run pertama. Tesnya kini
-    menyalakan servernya sendiri dengan `DATA_DIR` sementara.
+    menetap.** Sejak server REST ikut menegakkan aturan anti-duplikat, run
+    kedua pada hari yang sama akan bertabrakan dengan data run pertama. Tesnya
+    kini menyalakan servernya sendiri dengan `DATA_DIR` sementara.
+
+### Dua backend yang harus sepakat
+
+18a. **`server/` gampang tertinggal.** Sudah **dua kali** aturannya berbeda dari
+    Apps Script: sekali soal validasi Uniform, sekali soal aturan anti-duplikat
+    yang masih harian. Kalau mengubah aturan terima, ubah **keduanya** —
+    `server-gas/03_Ingest.gs` dan `server/server.js` (plus `server/storage.js`
+    kalau bentuk datanya ikut berubah). Rangkaian uji aplikasi memakai backend
+    REST itu, jadi selisihnya biasanya ketahuan di sana.
 
 ### Lingkungan kerja
 
@@ -529,6 +759,16 @@ Aplikasinya tidak terpengaruh — di browser keduanya memang serealm.
     non-interaktif. Jalankan dengan `timeout`, dan kalau menggantung minta
     pengguna menjalankannya sendiri.
 22. **`gh` CLI tidak terpasang** di komputer ini.
+22a. **`git pull` di `main` tidak membawa commit yang ada di cabang.** Terdengar
+    sepele, tapi gejalanya menyesatkan: `npm run build:gas` menghasilkan
+    `Code.gs` lama, lalu bug yang "sudah diperbaiki" tetap muncul di produksi.
+    Merge dulu, baru build. Lihat §6.
+22b. **Clone dangkal (`--depth 1`) memasang refspec sempit** yang hanya melacak
+    `main`. Cabang yang di-push dari klon itu berhasil di GitHub tapi ref
+    lokalnya tidak terbentuk, sehingga alat yang memeriksa "sudah di-push atau
+    belum" salah lapor. Penawarnya:
+    `git config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'`
+    lalu `git fetch`.
 23. **PDF dibangun lewat Chrome headless**, bukan reportlab (reportlab tidak
     terpasang). Tinggi diagram dibatasi `205mm` supaya tidak terdorong ke
     halaman berikutnya dan meninggalkan halaman kosong.
@@ -564,9 +804,16 @@ Aplikasinya tidak terpengaruh — di browser keduanya memang serealm.
 | **Tidak ada endpoint pembacaan penilaian** | Web app berakses publik; §5 PRD melarangnya. Sempat dibuat lalu dicabut |
 | Rekap di luar jalur POST | Balasan harus cepat; menyusun rekap butuh belasan detik |
 | Nama guide ditimpa server dari tab `Guides` | `guideId` adalah kebenaran; nama dari perangkat bisa usang |
-| Etika −5..+5, digabung `min` | Skala bertanda; nilai buruk tidak boleh tertutup nilai baik di pos lain |
+| Etika −5..+5 | Skala bertanda; nilai buruk harus bisa mengimbangi nilai baik |
+| **Satu penilaian = satu pengantaran; Pos 1 dan Pos 3 tidak disambungkan** | Rata-rata tidak peduli definisi penyebut asalkan konsisten, jadi menyambungkannya tidak membuat angkanya lebih adil — hanya menambah isian di lapangan atau logika tersembunyi. Tiap baris tetap menyimpan pos dan jam, jadi bisa dihitung ulang kalau kelak berubah |
+| **Reward memakai rata-rata per pengantaran, bukan jumlah** | Banyaknya pengantaran ditentukan urutan giliran, bukan kualitas guide-nya |
+| **Jeda dua lapis, bukan satu ambang keras** | Lama siklus antar naik-turun belum pernah terukur (aturan lama melarang datanya ada). Ambang keras yang terlalu longgar meloloskan salah pencet; yang terlalu ketat membuang pengantaran sah, dan penolakan server berarti datanya hilang. Keputusannya diserahkan ke petugas yang tahu keadaan lapangan |
+| **`0` dipakai sebagai penanda data lama Uniform** | Skala baru tidak pernah memakai `0`, jadi angka itu bisa membedakan baris lama tanpa menambah kolom penanda |
+| **Boolean Uniform tetap diterima server** | Perangkat yang belum memperbarui aplikasinya tidak boleh ditolak permanen — datanya akan hilang |
+| **Data lama dibaca pada skala baru (`0` → `−1`), tidak diperlakukan netral** | Satu skala untuk semua bulan supaya angkanya bisa dibandingkan lurus. Konsekuensinya September terlihat lebih buruk daripada saat dinilai, jadi **September tidak dipakai untuk reward** |
+| **Nama guide kembar dibedakan, `guideId` tidak pernah dipakai ulang** | `guideId` adalah kunci; regu pertama mempertahankan id lama supaya riwayat tetap menempel dan `Evaluations` tidak perlu dimigrasikan |
 | Koreksi lewat baris pengganti, bukan sunting baris | Append-only tetap utuh, jejak apa yang sempat tercatat tidak hilang, dan tidak perlu endpoint tulis-ulang |
-| Cap waktu koreksi mengikuti penilaian asli | Kunci "satu pos sekali sehari" memakai tanggal; cap waktu baru bisa melempar koreksi ke hari berikutnya |
+| Cap waktu koreksi mengikuti penilaian asli | Koreksi hanya sah untuk tanggal yang sama; cap waktu baru bisa melempar koreksi ke hari berikutnya |
 | Hanya penolakan server yang menuju "ditahan" | Perangkat bisa berminggu-minggu di luar jangkauan; gagal jaringan bukan alasan menyerah |
 | Entri "ditahan" tidak dihitung sebagai penilaian kembar | Menurut definisinya ia tidak ada di server; kalau ikut dihitung, tombol "Betulkan penilaian itu" menunjuk kiriman yang gagal, bukan baris yang benar-benar tercatat |
 
@@ -577,21 +824,41 @@ Yang sempat dicoba lalu **dibatalkan**, jangan diulang tanpa pembahasan:
 - **Endpoint `?action=ringkasan`** untuk menampilkan jumlah guide hadir di
   aplikasi — dicabut karena menambah endpoint pembacaan publik dan angka
   hanya-perangkat-sendiri menyesatkan.
+- **Mengganti nama guide kembar** — divisi pengelolaan kunjungan mengirim daftar
+  kelompok nama kembar beserta regunya, bukan nama pengganti. Jadi nama tidak
+  diganti; yang dipecah `guideId`-nya.
+- **Menolak keras di 60 menit** — sempat jadi ambang tunggal 30 menit, lalu
+  ditinjau ulang karena tidak ada data untuk mengkalibrasinya. Lihat §3.4.
 
 ---
 
 ## 9. Yang masih menggantung
 
-Daftar 13 Agustus sudah ditutup pada putaran 26 Agustus, kecuali dua hal yang
-memang diterima apa adanya. Yang tersisa:
-
-| # | Hal | Kenapa dibiarkan |
+| # | Hal | Kenapa dibiarkan / apa yang ditunggu |
 | --- | --- | --- |
-| 1 | Alamat `/exec` tertanam di repo publik dengan akses "Anyone" | Konsekuensi dari "aplikasi siap pakai tanpa setting manual". Mitigasinya: append-only, `guideId` wajib terdaftar, tidak ada endpoint pembacaan, dan koreksi hanya sah untuk baris yang sudah ada. Pihak luar bisa menambah baris palsu, tidak bisa membaca atau menghapus |
-| 2 | Cabang `cadangan-lokal-sebelum-deploy` sudah tidak diperlukan | Tinggal dihapus, tidak mengganggu |
-| 3 | Koreksi dari aplikasi hanya untuk penilaian **hari ini** | Disengaja: kunci "satu pos sekali sehari" memakai tanggal, dan rekap hari-hari sebelumnya biasanya sudah dilaporkan. Hari yang lewat lewat admin di spreadsheet |
-| 4 | `doPost` membaca seluruh kolom A–D + status tiap kiriman | Wajar sampai puluhan ribu baris. Kalau nanti lambat, saring per bulan |
-| 5 | Locale proyek Apps Script tetap berbahasa Inggris | Tidak lagi berpengaruh — nama bulan disusun sendiri lewat `BULAN_ID`. Hanya relevan kalau ada kode baru yang memakai pola `MMM` (tiruan di test-gas akan menangkapnya) |
+| 1 | **Nama banjar untuk dua pasang guide kembar seregu** — `I Nyoman Sandi Yasa (A)/(B)` di A1 dan `I Wayan Wirya (A)/(B)` di D2 | Label "(A)" dan "(B)" tidak berarti apa-apa bagi petugas di pos; pola `(Angsoka)`/`(Kidul)` pada Nyoman Darta yang benar karena bisa dicocokkan ke kartu guide. Menunggu divisi pengelolaan kunjungan |
+| 2 | **`I Nyoman Regog` vs `I wayan regog` di D1** | Beda nama depan, bukan sekadar ejaan. Perlu dicek ke kartu guide. Sebelas selisih ejaan lain sudah diputuskan memakai ejaan aplikasi |
+| 3 | **Setel ulang `JEDA_TOLAK_MENIT` (15) dan `JEDA_PERINGATAN_MENIT` (60)** | Keduanya tebakan. Data Oktober 2026 akan menunjukkan sebaran jarak antar pengantaran yang sebenarnya |
+| 4 | **Ketaatan berpakaian September hanya 22,1%** sementara ID-Card 97,3% | Pola itu janggal. Patut dicek apakah tombol "Tidak" pada Uniform lama dipahami petugas sebagai "tidak sempurna", bukan "tidak berseragam". Jangan dipakai untuk apa pun sebelum dikonfirmasi ke petugas pos |
+| 5 | **Data September tidak dipakai untuk reward** | Bulan itu dinilai separuh dengan aturan lama, separuh baru, dan patahannya di tengah bulan. Evaluasi bulanan yang sesungguhnya **mulai Oktober 2026** |
+| 6 | **fileId spreadsheet di dokumen lama salah** | Menunjuk berkas lama, bukan *Basis Data 2026*. Ambil dari URL saat dibutuhkan |
+| 7 | Alamat `/exec` tertanam di repo publik dengan akses "Anyone" | Konsekuensi dari "aplikasi siap pakai tanpa setting manual". Mitigasinya: append-only, `guideId` wajib terdaftar, tidak ada endpoint pembacaan, koreksi hanya sah untuk baris yang sudah ada |
+| 8 | Koreksi dari aplikasi hanya untuk penilaian **hari ini** | Disengaja; hari yang lewat lewat admin di spreadsheet |
+| 9 | `doPost` membaca seluruh kolom A–D + status tiap kiriman | Wajar sampai puluhan ribu baris. Kalau nanti lambat, saring per bulan |
+| 10 | Locale proyek Apps Script tetap berbahasa Inggris | Tidak berpengaruh — nama bulan disusun sendiri lewat `BULAN_ID` |
+| 11 | **Dokumen lain di `docs/` belum mengikuti dua putaran 28 September** | `PRD-APLIKASI.md`, `ALUR-APLIKASI.md`, dan `PANDUAN-PEMAKAIAN.md` masih menjelaskan Uniform Ya/Tidak dan aturan satu-pos-sekali-sehari |
+
+### Sudah ditutup 28 September
+
+| Dulu | Sekarang |
+| --- | --- |
+| 15 record menggabungkan dua orang berbeda ke satu `guideId` | Dipecah jadi 31; daftar guide 296 → 314, tiap guide satu regu |
+| Guide bernama kembar mustahil dinilai lewat aplikasi | Kartu dan chip kandidat membawa `data-guide-id` |
+| Uniform hanya Ya/Tidak | Tiga tingkat −1/+1/+2, ikut dijumlahkan ke nilai total |
+| Satu pos sekali sehari; pengantaran kedua hilang diam-diam | Per pengantaran, dengan jeda dua lapis |
+| Peringkat memakai rata-rata per **hari**, ambang 3 hari | Rata-rata per **pengantaran**, ambang 5 |
+| `11_Laporan.gs` tidak diuji sama sekali | 7 pemeriksaan; langsung menemukan dua bug yang sudah sampai ke produksi |
+| `server/` masih memakai aturan harian lama | Disamakan dengan Apps Script |
 
 ### Sudah ditutup 26 Agustus
 
@@ -620,6 +887,11 @@ memang diterima apa adanya. Yang tersisa:
 | [`docs/PANDUAN-PEMAKAIAN.md`](PANDUAN-PEMAKAIAN.md) | Panduan staff & admin, bahasa sederhana |
 | [`docs/PRD-APLIKASI.md`](PRD-APLIKASI.md) | Spesifikasi lengkap, kriteria penerimaan, risiko |
 | [`docs/ALUR-APLIKASI.md`](ALUR-APLIKASI.md) | 13 diagram alur (Mermaid) |
+
+⚠️ Ketiga dokumen terakhir **belum mengikuti putaran 28 September** — isinya
+masih menjelaskan Uniform Ya/Tidak dan aturan satu-pos-sekali-sehari. Kalau
+berselisih dengan berkas ini, berkas ini yang lebih baru; kalau berselisih
+dengan kode, **kode yang benar**.
 
 Ketiga dokumen pertama bisa dicetak menjadi PDF lewat `npm run docs:pdf`.
 PDF-nya **tidak disimpan di repo** — ia hasil olahan yang cepat basi dan berat
