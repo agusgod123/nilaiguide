@@ -181,18 +181,25 @@ check('AC-2 daftar guide >= 10 & dapat dipilih', nOpt >= 10, `${nOpt} guide dari
   check('Filter regu mempersempit lagi', a1 > 0 && a2 > 0 && a1 < asing && a2 < asing,
     `Asing-1 ${a1} · Asing-2 ${a2}`);
 
-  // Guide yang merangkap dua regu harus muncul di keduanya
+  // Dulu 15 record memuat regu ganda ("A1, A2") karena dikira satu orang
+  // merangkap. Ternyata itu dua orang berbeda yang kebetulan bernama sama, dan
+  // penggabungan itulah yang membuat penilaian orang kedua ditolak sebagai
+  // duplikat pos. Sekarang tiap orang punya guideId sendiri.
   const daftar = (await (await fetch(BASE + '/api/guides')).json()).guides;
-  const rangkap = daftar.find(g => (g.regu || '').indexOf(',') > -1);
-  if (rangkap) {
-    const kode = rangkap.regu.split(',').map(s => s.trim());
-    const munculDiSemua = kode.every(k => {
-      pilih(k[0] === 'A' ? 'Asing' : 'Domestik', k.slice(1));
-      return $$('#guideList option').some(o => o.value === rangkap.guideName);
-    });
-    check('Guide merangkap regu muncul di setiap regunya', munculDiSemua,
-      `${rangkap.guideName} (${rangkap.regu})`);
-  }
+  const rangkap = daftar.filter(g => (g.regu || '').indexOf(',') > -1);
+  check('Tidak ada lagi record guide yang regunya digabung', rangkap.length === 0,
+    rangkap.map(g => `${g.guideId} ${g.regu}`).join(', ')
+      || `${daftar.length} record, satu regu masing-masing`);
+
+  // Kemampuan regu ganda tetap ada di kode untuk berjaga-jaga. Uji logikanya
+  // langsung, bukan menumpang data — dulu pemeriksaan ini dibungkus `if` dan
+  // begitu contohnya hilang dari data, ia berhenti jalan tanpa bersuara.
+  const ganda = { regu: 'A1, D2' };
+  check('Guide beregu ganda tetap cocok di setiap regunya',
+    window.App.cocokFilter(ganda, 'Asing', '1') &&
+    window.App.cocokFilter(ganda, 'Domestik', '2') &&
+    !window.App.cocokFilter(ganda, 'Asing', '2'),
+    window.App.labelRegu(ganda.regu));
 
   pilih('', '');
   check('Filter dikosongkan menampilkan seluruh guide', $$('#guideList option').length === semua);
@@ -222,7 +229,7 @@ check('AC-6 semua layar (Penilaian, Guide, Riwayat, Pengaturan, Tentang) dapat d
 /* ---------- AC-3 simpan lokal ---------- */
 click($('#btnNewEval'));
 await sleep(50);
-setVal($('#guideInput'), 'I Wayan Suparta');
+setVal($('#guideInput'), 'I Wayan Sweta');
 click($('[data-crit=idCard] .seg.yes'));
 click($('[data-crit=uniform] .seg.no'));
 click($('[data-crit=etika] .stepbtn[data-step="1"]'));
@@ -236,7 +243,7 @@ check('Draft otomatis tersimpan sebelum submit', !!draftMentah);
 // §5: isi draft sama dengan isi penilaian, jadi tidak boleh tergeletak polos
 // sementara penilaiannya dienkripsi.
 check('Draft tersimpan terenkripsi, bukan teks polos',
-  !!draftMentah && !draftMentah.includes('I Wayan Suparta') && !draftMentah.includes('uji otomatis'),
+  !!draftMentah && !draftMentah.includes('I Wayan Sweta') && !draftMentah.includes('uji otomatis'),
   (draftMentah || '').slice(0, 46) + '…');
 check('Draft terenkripsi tetap bisa dibaca kembali oleh aplikasi',
   (await window.DB.bacaDraft() || {}).catatan === 'uji otomatis');
@@ -248,7 +255,7 @@ check('AC-3 penilaian tersimpan di IndexedDB', counts.total === 1, `${counts.tot
 
 const saved = (await window.DB.all())[0];
 const dariServer = (await (await fetch(BASE + '/api/guides')).json()).guides;
-const seharusnya = dariServer.find(g => g.guideName === 'I Wayan Suparta');
+const seharusnya = dariServer.find(g => g.guideName === 'I Wayan Sweta');
 check('Model data sesuai PRD §7',
   !!saved.evaluationId && saved.guideId === seharusnya.guideId && saved.pos === 1 &&
   !isNaN(Date.parse(saved.timestamp)) &&
@@ -338,7 +345,7 @@ check('#guideCount tidak ikut terhapus saat kandidat tampil', !!$('#guideCount')
     `${d.toISOString().slice(0, 10)} (UTC) → ${lokal(d.toISOString())} (setempat)`);
 }
 
-setVal($('#guideInput'), 'I Wayan Ardana');
+setVal($('#guideInput'), 'I Wayan Jiguh');
 $('#formEval').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
 await sleep(300);
 check('Kriteria belum lengkap ditolak', (await window.DB.counts()).total === 1);
@@ -401,7 +408,7 @@ check('Rekap memuat bagian per guide, per pos, dan per tanggal',
   ['REKAP HARIAN PER GUIDE', 'REKAP PER POS PEMERIKSAAN', 'REKAP PER TANGGAL', 'RINCIAN SEMUA PENILAIAN']
     .every(j => csv.includes(j)));
 check('Rekap mencantumkan nama guide yang dinilai perangkat ini',
-  csv.includes('I Wayan Ardana'), csv.split('\r\n').find(b => b.includes('I Wayan Ardana')) || '-');
+  csv.includes('I Wayan Jiguh'), csv.split('\r\n').find(b => b.includes('I Wayan Jiguh')) || '-');
 check('Rincian membawa waktu UTC & evaluationId untuk cross-check ke spreadsheet',
   csv.includes('Waktu (UTC, sama dgn spreadsheet)') &&
   /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(csv));
@@ -557,8 +564,11 @@ check('Pengiriman ulang tidak menggandakan data di server (append-only)', before
   await sleep(1200);
 
   const jml = w2.document.querySelectorAll('#guideList option').length;
-  check('Daftar guide tetap muncul walau server tidak terjangkau', jml === 296,
-    `${jml} guide dari salinan bawaan`);
+  // Jangan di-hardcode: daftar guide bertambah setiap ada pemutakhiran.
+  const jmlBawaan = JSON.parse(
+    fs.readFileSync(path.join(APP, 'public', 'guides.json'), 'utf8')).length;
+  check('Daftar guide tetap muncul walau server tidak terjangkau', jml === jmlBawaan,
+    `${jml} dari ${jmlBawaan} guide di salinan bawaan`);
   check('Tidak menampilkan pesan "daftar guide belum tersedia"',
     w2.document.querySelector('#guideHelp').textContent.indexOf('tidak dapat dimuat') === -1);
 
@@ -1211,6 +1221,50 @@ check('Tidak ada error JavaScript fatal', jsErrors.length === 0, jsErrors.slice(
   });
   check('State yang berubah hanya dideklarasikan di 00-inti.js', salinan.length === 0,
     salinan.length ? 'salinan tandingan di ' + salinan.join(', ') : `${stateKeys.length} kunci di App.state`);
+}
+
+/* ---------- Nama kembar: dua orang berbeda, nama identik ---------- */
+// 15 record lama menggabungkan dua orang berbeda ke SATU guideId (regu "A2, D2"),
+// sehingga penilaian orang kedua ditolak server sebagai duplikat pos lalu hilang
+// diam-diam. Setelah record dipecah, nama boleh kembar — jadi nama tidak lagi
+// cukup untuk menentukan siapa yang dinilai; pemilihan harus lewat guideId.
+{
+  ['#filterKategori', '#filterRegu'].forEach(sel => { if ($(sel)) setVal($(sel), ''); });
+  await sleep(50);
+  const kembar = window.App.state.guides.filter(g => g.guideName === 'I Wayan Suparta');
+  check('Dua orang berbeda boleh bernama "I Wayan Suparta"',
+    kembar.length === 2 && kembar[0].guideId !== kembar[1].guideId
+      && kembar[0].regu !== kembar[1].regu,
+    kembar.map(g => `${g.guideId}/${g.regu}`).join(' '));
+
+  const sebelum = (await window.DB.counts()).total;
+  click($('#btnNewEval')); await sleep(60);
+  setVal($('#guideInput'), 'I Wayan Suparta');
+  await sleep(60);
+  check('Nama kembar tidak ditebak — kandidatnya ditawarkan',
+    !window.App.state.form.guide && !$('#guideAmbigu').hidden
+      && $$('#guideAmbigu .chip').length === 2,
+    `${$$('#guideAmbigu .chip').length} kandidat`);
+
+  // Tanpa guideId, klik kandidat kembali menebak lewat nama — dan buntu lagi.
+  const target = kembar[1];
+  const chip = $$('#guideAmbigu .chip').find(c => c.dataset.guideId === target.guideId);
+  check('Chip kandidat membawa guideId, bukan sekadar nama', !!chip,
+    $$('#guideAmbigu .chip').map(c => c.dataset.guideId).join(' '));
+  click(chip); await sleep(80);
+  check('Memilih kandidat mengunci penilaian ke orang yang benar',
+    !!window.App.state.form.guide && window.App.state.form.guide.guideId === target.guideId,
+    (window.App.state.form.guide || {}).guideId || '-');
+
+  click($('[data-crit=idCard] .seg.yes'));
+  click($('[data-crit=uniform] .seg.yes'));
+  $('#formEval').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  await sleep(700);
+  const simpan = (await window.DB.all()).find(e => e.guideId === target.guideId);
+  check('Penilaian guide bernama kembar tersimpan atas guideId yang tepat',
+    (await window.DB.counts()).total === sebelum + 1 && !!simpan
+      && simpan.guideName === 'I Wayan Suparta',
+    simpan ? `${simpan.guideId} · ${simpan.guideName}` : 'tidak tersimpan');
 }
 
 /* ---------- ringkasan ---------- */

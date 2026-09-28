@@ -108,6 +108,17 @@
    * Yang sedang tersaring diprioritaskan, supaya pilihan filter menentukan
    * guide mana yang dimaksud bila ada nama mirip.
    */
+  /**
+   * Cari guide dari guideId — satu-satunya penanda yang benar-benar unik.
+   * Dipakai setiap kali guide dipilih secara eksplisit (kartu, chip kandidat,
+   * koreksi), karena beberapa guide bernama persis sama.
+   */
+  App.findGuideById = function findGuideById(id) {
+    const q = String(id || '').trim();
+    if (!q) return null;
+    return App.state.guides.find(g => String(g.guideId) === q) || null;
+  }
+
   App.findGuide = function findGuide(name) {
     const q = String(name || '').trim().toLowerCase();
     if (!q) return null;
@@ -135,7 +146,10 @@
       const persis = arr.filter(g => g.guideName.toLowerCase() === q);
       if (persis.length === 1) return { guide: persis[0] };
       if (persis.length > 1) {
-        return { error: `Ada ${persis.length} guide bernama "${teks}" — pilih lewat Daftar Guide` };
+        // Dulu di sini hanya ada pesan galat tanpa kandidat, padahal kartu di
+        // Daftar Guide juga cuma mengirim nama — staff jadi buntu. Sekarang
+        // kandidatnya dikembalikan supaya bisa dipilih lewat guideId.
+        return { error: `Ada ${persis.length} guide bernama "${teks}" — pilih salah satu`, kandidat: persis };
       }
       const mirip = arr.filter(g => g.guideName.toLowerCase().includes(q));
       if (mirip.length === 1) return { guide: mirip[0] };
@@ -163,7 +177,7 @@
     // saat tanpa filter, jadi dinaikkan sampai seluruh daftar muat.
     const tampil = list.slice(0, 300);
     box.innerHTML = tampil.map(g => `
-      <button class="card" data-guide="${esc(g.guideName)}">
+      <button class="card" data-guide="${esc(g.guideName)}" data-guide-id="${esc(g.guideId)}">
         <span class="cstat">👤</span>
         <span class="cbody">
           <span class="cname">${esc(g.guideName)}</span>

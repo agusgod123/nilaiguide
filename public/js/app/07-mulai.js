@@ -30,7 +30,8 @@
       if (nav) { App.go(nav.dataset.nav); }
       const gcard = e.target.closest('[data-guide]');
       if (gcard) {
-        const g = App.findGuide(gcard.dataset.guide);
+        // guideId dulu — nama bisa kembar, id tidak pernah.
+        const g = App.findGuideById(gcard.dataset.guideId) || App.findGuide(gcard.dataset.guide);
         if (g) {
           App.state.form.guide = g; $('#guideInput').value = g.guideName;
           App.showPicked(g); App.tampilkanKandidat(null); App.saveDraft(); App.go('nilai');
@@ -57,11 +58,25 @@
     });
 
     $('#guideInput').addEventListener('input', e => {
-      const g = App.findGuide(e.target.value);
-      App.state.form.guide = g;
-      if (g && g.guideName.toLowerCase() === e.target.value.trim().toLowerCase()) App.showPicked(g);
-      else $('#guidePicked').classList.add('hidden');
-      App.tampilkanKandidat(null);
+      const teks = String(e.target.value || '').trim();
+      const q = teks.toLowerCase();
+      // Nama yang diketik bisa dimiliki lebih dari satu orang. Yang sedang
+      // tersaring diprioritaskan; kalau tetap lebih dari satu, jangan menebak —
+      // tawarkan kandidatnya supaya staff memilih orangnya lewat guideId.
+      const persis = (arr) => arr.filter(x => String(x.guideName).toLowerCase() === q);
+      let cocok = persis(App.guidesTersaring());
+      if (cocok.length !== 1) cocok = persis(App.state.guides);
+      if (cocok.length > 1) {
+        App.state.form.guide = null;
+        $('#guidePicked').classList.add('hidden');
+        App.tampilkanKandidat(cocok);
+      } else {
+        const g = cocok[0] || App.findGuide(teks);
+        App.state.form.guide = g;
+        if (g && g.guideName.toLowerCase() === q) App.showPicked(g);
+        else $('#guidePicked').classList.add('hidden');
+        App.tampilkanKandidat(null);
+      }
       App.saveDraft();
       $('#draftNote').hidden = false;
     });

@@ -24,7 +24,14 @@
     "guideId": "G-004",
     "guideName": "I Gede Darmayasa",
     "kategori": "Asing",
-    "regu": "A1, A2",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-297",
+    "guideName": "I Gede Darmayasa",
+    "kategori": "Asing",
+    "regu": "A2",
     "aktif": true
   },
   {
@@ -233,8 +240,15 @@
   {
     "guideId": "G-034",
     "guideName": "I Gusti Ngurah Darmayasa",
-    "kategori": "Asing, Domestik",
-    "regu": "A1, D1",
+    "kategori": "Asing",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-298",
+    "guideName": "I Gusti Ngurah Darmayasa",
+    "kategori": "Domestik",
+    "regu": "D1",
     "aktif": true
   },
   {
@@ -436,8 +450,15 @@
   {
     "guideId": "G-063",
     "guideName": "I Kadek Wardana",
-    "kategori": "Asing, Domestik",
-    "regu": "A1, D1",
+    "kategori": "Asing",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-299",
+    "guideName": "I Kadek Wardana",
+    "kategori": "Domestik",
+    "regu": "D1",
     "aktif": true
   },
   {
@@ -751,8 +772,15 @@
   {
     "guideId": "G-108",
     "guideName": "I Komang Sudiarta",
-    "kategori": "Asing, Domestik",
-    "regu": "A1, D1",
+    "kategori": "Asing",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-300",
+    "guideName": "I Komang Sudiarta",
+    "kategori": "Domestik",
+    "regu": "D1",
     "aktif": true
   },
   {
@@ -1060,7 +1088,14 @@
     "guideId": "G-152",
     "guideName": "I Nengah Sudarta",
     "kategori": "Asing",
-    "regu": "A1, A2",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-301",
+    "guideName": "I Nengah Sudarta",
+    "kategori": "Asing",
+    "regu": "A2",
     "aktif": true
   },
   {
@@ -1179,7 +1214,14 @@
     "guideId": "G-169",
     "guideName": "I Nyoman Astawa",
     "kategori": "Asing",
-    "regu": "A1, A2",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-302",
+    "guideName": "I Nyoman Astawa",
+    "kategori": "Asing",
+    "regu": "A2",
     "aktif": true
   },
   {
@@ -1331,7 +1373,14 @@
   },
   {
     "guideId": "G-191",
-    "guideName": "I Nyoman Sandi Yasa",
+    "guideName": "I Nyoman Sandi Yasa (A)",
+    "kategori": "Asing",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-313",
+    "guideName": "I Nyoman Sandi Yasa (B)",
     "kategori": "Asing",
     "regu": "A1",
     "aktif": true
@@ -1354,7 +1403,14 @@
     "guideId": "G-194",
     "guideName": "I Nyoman Suartana",
     "kategori": "Asing",
-    "regu": "A1, A2",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-303",
+    "guideName": "I Nyoman Suartana",
+    "kategori": "Asing",
+    "regu": "A2",
     "aktif": true
   },
   {
@@ -1382,7 +1438,14 @@
     "guideId": "G-198",
     "guideName": "I Nyoman Sudarta",
     "kategori": "Asing",
-    "regu": "A1, A2",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-304",
+    "guideName": "I Nyoman Sudarta",
+    "kategori": "Asing",
+    "regu": "A2",
     "aktif": true
   },
   {
@@ -1619,8 +1682,15 @@
   {
     "guideId": "G-232",
     "guideName": "I Wayan Ardana",
-    "kategori": "Asing, Domestik",
-    "regu": "A1, D1",
+    "kategori": "Asing",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-305",
+    "guideName": "I Wayan Ardana",
+    "kategori": "Domestik",
+    "regu": "D1",
     "aktif": true
   },
   {
@@ -1654,8 +1724,15 @@
   {
     "guideId": "G-237",
     "guideName": "I Wayan Darmayasa",
-    "kategori": "Asing, Domestik",
-    "regu": "A1, D1",
+    "kategori": "Asing",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-306",
+    "guideName": "I Wayan Darmayasa",
+    "kategori": "Domestik",
+    "regu": "D1",
     "aktif": true
   },
   {
@@ -1766,8 +1843,22 @@
   {
     "guideId": "G-253",
     "guideName": "I Wayan Mudana",
-    "kategori": "Asing, Domestik",
-    "regu": "A1, D1, D2",
+    "kategori": "Asing",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-307",
+    "guideName": "I Wayan Mudana",
+    "kategori": "Domestik",
+    "regu": "D1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-308",
+    "guideName": "I Wayan Mudana",
+    "kategori": "Domestik",
+    "regu": "D2",
     "aktif": true
   },
   {
@@ -1879,14 +1970,28 @@
     "guideId": "G-269",
     "guideName": "I Wayan Sudarta",
     "kategori": "Asing",
-    "regu": "A1, A2",
+    "regu": "A1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-309",
+    "guideName": "I Wayan Sudarta",
+    "kategori": "Asing",
+    "regu": "A2",
     "aktif": true
   },
   {
     "guideId": "G-270",
     "guideName": "I Wayan Sudiarta",
-    "kategori": "Asing, Domestik",
-    "regu": "A2, D2",
+    "kategori": "Asing",
+    "regu": "A2",
+    "aktif": true
+  },
+  {
+    "guideId": "G-310",
+    "guideName": "I Wayan Sudiarta",
+    "kategori": "Domestik",
+    "regu": "D2",
     "aktif": true
   },
   {
@@ -1920,8 +2025,15 @@
   {
     "guideId": "G-275",
     "guideName": "I Wayan Suparta",
-    "kategori": "Asing, Domestik",
-    "regu": "A2, D2",
+    "kategori": "Asing",
+    "regu": "A2",
+    "aktif": true
+  },
+  {
+    "guideId": "G-311",
+    "guideName": "I Wayan Suparta",
+    "kategori": "Domestik",
+    "regu": "D2",
     "aktif": true
   },
   {
@@ -1963,7 +2075,21 @@
     "guideId": "G-281",
     "guideName": "I Wayan Wirya",
     "kategori": "Domestik",
-    "regu": "D1, D2",
+    "regu": "D1",
+    "aktif": true
+  },
+  {
+    "guideId": "G-312",
+    "guideName": "I Wayan Wirya (A)",
+    "kategori": "Domestik",
+    "regu": "D2",
+    "aktif": true
+  },
+  {
+    "guideId": "G-314",
+    "guideName": "I Wayan Wirya (B)",
+    "kategori": "Domestik",
+    "regu": "D2",
     "aktif": true
   },
   {

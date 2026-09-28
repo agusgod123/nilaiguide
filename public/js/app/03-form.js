@@ -111,7 +111,8 @@
     if (!kandidat || !kandidat.length) { el.hidden = true; el.textContent = ''; return; }
     const tampil = kandidat.slice(0, 6);
     el.innerHTML = 'Maksud Anda: ' + tampil.map(g =>
-      `<button type="button" class="chip" data-guide="${esc(g.guideName)}">${esc(g.guideName)}</button>`
+      `<button type="button" class="chip" data-guide="${esc(g.guideName)}" data-guide-id="${esc(g.guideId)}">` +
+      `${esc(g.guideName)} <small>· ${esc(App.labelRegu(g.regu))}</small></button>`
     ).join(' ') + (kandidat.length > tampil.length
       ? ` <small>(+${kandidat.length - tampil.length} lainnya — ketik lebih lengkap)</small>` : '');
     el.hidden = false;
@@ -119,7 +120,14 @@
 
   App.submitEval = async function submitEval(e) {
     e.preventDefault();
-    const pilihan = App.guideUntukSimpan($('#guideInput').value);
+    // Pilihan eksplisit lewat kartu/chip/koreksi sudah membawa guideId, dan itu
+    // menang atas pencocokan ulang dari nama: dua orang boleh bernama sama
+    // persis, sehingga nama saja tidak cukup untuk menentukan siapa yang dinilai.
+    const dipilih = App.state.form.guide;
+    const ketikan = String($('#guideInput').value || '').trim().toLowerCase();
+    const pilihan = (dipilih && String(dipilih.guideName).toLowerCase() === ketikan)
+      ? { guide: dipilih }
+      : App.guideUntukSimpan($('#guideInput').value);
     if (!pilihan.guide) {
       App.toast(pilihan.error, 'warn', '⚠️');
       App.tampilkanKandidat(pilihan.kandidat);

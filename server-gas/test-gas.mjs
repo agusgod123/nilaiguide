@@ -315,7 +315,8 @@ cek('setup() membuat tab Guides, Evaluations, Petunjuk',
   ['Guides', 'Evaluations', 'Petunjuk'].every(n => doc.getSheetByName(n)),
   doc.getSheets().map(s => s.nama).join(', '));
 cek('setup() menghapus tab bawaan Sheet1', !doc.getSheetByName('Sheet1'));
-const JML_GUIDE = 296;
+const JML_GUIDE = sandbox.GUIDES_AWAL.length;   // ikut berkas data, jangan di-hardcode:
+                                                // daftar guide bertambah setiap ada pemutakhiran
 cek('setup() mengisi seluruh guide + header',
   doc.getSheetByName('Guides').getLastRow() === JML_GUIDE + 1,
   `${doc.getSheetByName('Guides').getLastRow() - 1} guide`);
@@ -599,7 +600,7 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
       kosong.slice(0, 4).join(' | '));
 
     // Baris penutup — dibaca MENURUN: hari itu berapa guide yang hadir
-    const barisAkhir = 4 + 296;                    // 296 guide aktif
+    const barisAkhir = 4 + JML_GUIDE;              // seluruh guide aktif
     const fJml = kh.getRange(barisAkhir + 2, 1, 1, 6).getValues()[0];
     const fPos = kh.getRange(barisAkhir + 3, 1, 1, 6).getValues()[0];
     cek('Ada baris "JUMLAH GUIDE HADIR" di bawah tabel',
@@ -633,8 +634,9 @@ cek('health menghitung jumlah baris dengan benar', totalAkhir === 4, `total ${to
     }
 
     cek('Rumus JUMLAH GUIDE HADIR menjangkau seluruh baris guide, bukan sebagian',
-      fJml[2].includes('C5:C' + barisAkhir) && barisAkhir === 300,
-      `C5:C${barisAkhir} untuk 296 guide`);
+      fJml[2].includes('C5:C' + barisAkhir)
+        && JML_GUIDE === doc.getSheetByName('Guides').getLastRow() - 1,
+      `C5:C${barisAkhir} untuk ${JML_GUIDE} guide`);
 
     // Rincian per pos ikut memakai aturan yang sama
     const pp = doc.getSheetByName('Rekap per Pos 2026-07');
