@@ -212,7 +212,7 @@ function bangunDasbor_(bulan, ringkasan, guides, infoRegu) {
   }
 
   /* ---------- tabel peringkat ---------- */
-  var reviewPeta = kumpulkanReviewManual_(bulan);
+  var reviewPeta = kumpulkanReviewManual_(bulan, guides);
   var daftar = peringkatGuide_(ringkasan, guides, reviewPeta);
   var cukup = daftar.filter(function (x) { return x.antar >= MIN_PENGANTARAN_PERINGKAT; });
   var kurang = daftar.filter(function (x) { return x.antar < MIN_PENGANTARAN_PERINGKAT; });

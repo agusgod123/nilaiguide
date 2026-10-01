@@ -47,7 +47,8 @@ function peringkatGuide_(ringkasan, guides, reviewPeta) {
       // granularitasnya memang berbeda dari kriteria lain. Dibiarkan begitu:
       // satu-satunya sumbernya ketikan manual, dan memecahnya per pengantaran
       // berarti mengarang angka yang tidak pernah diisi siapa pun.
-      var rvw = reviewPeta[g.guideName + '|' + tgl];
+      // Kuncinya guideId, bukan nama — lihat kumpulkanReviewManual_.
+      var rvw = reviewPeta[g.guideId + '|' + tgl];
       if (rvw === undefined) rvw = sel.review || 0;
       hari++;
       antar += sel.antar;
@@ -63,7 +64,7 @@ function peringkatGuide_(ringkasan, guides, reviewPeta) {
     // aplikasi hari itu) tetap dihitung untuk peringkat review — angka itu
     // sudah diketik tim dan tidak boleh hilang hanya karena tidak ada
     // penilaian pendampingnya.
-    var awalan = g.guideName + '|';
+    var awalan = g.guideId + '|';
     for (var kunci in reviewPeta) {
       if (kunci.indexOf(awalan) !== 0) continue;
       var tglR = kunci.slice(awalan.length);

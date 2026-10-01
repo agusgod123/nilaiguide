@@ -298,7 +298,7 @@ function lapAmbilGuide_(bulan) {
 
   const guides     = bacaGuides_();
   const ringkasan  = rangkumBulan_(bulan);
-  const reviewPeta = kumpulkanReviewManual_(bulan);
+  const reviewPeta = kumpulkanReviewManual_(bulan, guides);
   const mentah     = peringkatGuide_(ringkasan, guides, reviewPeta);
 
   if (!Array.isArray(mentah)) {
@@ -1137,7 +1137,7 @@ function ujiLaporan() {
   const guides = bacaGuides_();
   catat.push('bacaGuides_            : ' + guides.length + ' guide terdaftar');
 
-  const mentah = peringkatGuide_(rangkumBulan_(bulan), guides, kumpulkanReviewManual_(bulan));
+  const mentah = peringkatGuide_(rangkumBulan_(bulan), guides, kumpulkanReviewManual_(bulan, guides));
   catat.push('peringkatGuide_        : ' + (Array.isArray(mentah)
     ? mentah.length + ' guide punya data bulan ini' : 'BUKAN larik (' + typeof mentah + ') ❌'));
 

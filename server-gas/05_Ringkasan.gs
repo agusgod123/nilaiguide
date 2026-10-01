@@ -199,22 +199,66 @@ function bacaReviewManual_(namaTab) {
 
 
 /**
- * Kumpulkan angka REVIEW yang diketik tim, dari SELURUH tab regu.
+ * Kumpulkan angka REVIEW yang diketik tim, dari SELURUH tab regu, dikunci
+ * `guideId` — BUKAN nama.
  *
  * REVIEW tidak pernah dikirim aplikasi — satu-satunya sumbernya adalah ketikan
- * manual di tab rekap regu. Guide yang merangkap beberapa regu muncul di lebih
- * dari satu tab, dan angkanya bisa saja hanya diketik di salah satunya; diambil
- * yang paling besar, mengikuti aturan "jangan hilangkan review" yang sudah
- * dipakai rangkumBulan_.
+ * manual di tab rekap regu, dan tab itu memuat NAMA, bukan guideId.
  *
- * @return peta 'Nama Guide|yyyy-mm-dd' -> angka
+ * Kenapa kuncinya tidak boleh nama: ada nama yang dipakai dua orang di regu
+ * BERBEDA (nama kembar beda regu sengaja dibiarkan tanpa pembeda). Dengan kunci
+ * nama, review yang diketik untuk satu orang ikut terhitung ke kembarannya —
+ * di tanggal yang sama lewat harian, di tanggal lain lewat "hari yang hanya
+ * punya review" — sampai ke NILAI TOTAL dan RATA di Dasbor dan Laporan.
+ *
+ * Di dalam SATU regu nama selalu unik (kembar seregu diberi pembeda dalam
+ * kurung), jadi baris di tab regu X dipetakan ke anggota regu X yang bernama
+ * sama. Nama yang tidak ada di regu tabnya (mis. guide pindah regu setelah tab
+ * bulan itu disusun) dicocokkan ke seluruh daftar, tapi HANYA bila nama itu
+ * milik tepat satu guide. Yang tetap tidak bisa dipastikan dilewati dan
+ * dicatat di Logger: lebih baik satu angka hilang daripada menempel ke orang
+ * yang salah.
+ *
+ * Guide yang (pernah) merangkap beberapa regu muncul di lebih dari satu tab
+ * dengan guideId yang sama; angkanya bisa saja hanya diketik di salah satunya,
+ * jadi diambil yang paling besar.
+ *
+ * @param {string} bulan  'YYYY-MM'
+ * @param {Array}  guides hasil bacaGuides_()
+ * @return peta 'guideId|yyyy-mm-dd' -> angka
  */
-function kumpulkanReviewManual_(bulan) {
+function kumpulkanReviewManual_(bulan, guides) {
+  // Gagal keras, bukan diam: tanpa daftar guide peta ini kosong, dan seluruh
+  // angka REVIEW di Dasbor & Laporan menjadi nol tanpa ada yang sadar.
+  if (!guides || !guides.length) {
+    throw new Error('kumpulkanReviewManual_ butuh daftar guide (hasil bacaGuides_()).');
+  }
+  var pemilikNama = {};                       // nama -> [guideId, ...] di seluruh regu
+  guides.forEach(function (g) {
+    (pemilikNama[g.guideName] = pemilikNama[g.guideName] || []).push(g.guideId);
+  });
+
   var gabung = {};
   for (var i = 0; i < REGU_INFO.length; i++) {
-    var peta = bacaReviewManual_(namaTabRekap_(REGU_INFO[i].kode, bulan));
+    var kode = REGU_INFO[i].kode;
+    var anggota = {};                         // nama -> guideId, anggota regu ini saja
+    guides.forEach(function (g) {
+      if (g.regu.indexOf(kode) > -1) anggota[g.guideName] = g.guideId;
+    });
+
+    var peta = bacaReviewManual_(namaTabRekap_(kode, bulan));
     for (var k in peta) {
-      if (gabung[k] === undefined || peta[k] > gabung[k]) gabung[k] = peta[k];
+      var pisah = k.lastIndexOf('|');
+      var nama = k.slice(0, pisah), tgl = k.slice(pisah + 1);
+      var gid = anggota[nama];
+      if (!gid && pemilikNama[nama] && pemilikNama[nama].length === 1) gid = pemilikNama[nama][0];
+      if (!gid) {
+        Logger.log('REVIEW "' + nama + '" tanggal ' + tgl + ' di tab regu ' + kode +
+                   ' tidak bisa dipastikan pemiliknya — dilewati');
+        continue;
+      }
+      var kunci = gid + '|' + tgl;
+      if (gabung[kunci] === undefined || peta[k] > gabung[kunci]) gabung[kunci] = peta[k];
     }
   }
   return gabung;

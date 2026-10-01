@@ -1783,6 +1783,88 @@ cek('ujiCepat() bawaan berjalan & membersihkan barisnya',
     harianMg.map(p => p.split(' selesai')[0]).join(' | '));
 }
 
+/* ---------------- REVIEW manual dikunci guideId, bukan nama ----------------
+   Ada 14 nama yang dipakai dua orang di regu BERBEDA. Dulu review dicocokkan
+   lewat nama, sehingga angka yang diketik untuk satu orang ikut terhitung ke
+   kembarannya — di tanggal yang sama lewat harian, di tanggal lain lewat "hari
+   yang hanya punya review" — sampai ke NILAI TOTAL dan RATA di Dasbor. */
+{
+  const BLN = '2035-06';
+  const P = (obj) => JSON.parse(doPost({ postData: { contents: JSON.stringify(obj) } }).getContent());
+  const kirim = (id, gid, tgl) => P({
+    evaluationId: id, guideId: gid, guideName: 'x', pos: 1,
+    timestamp: tgl + 'T03:00:00.000Z',
+    criteria: { uniform: 1, idCard: true, etika: 1 }, catatan: '',
+  });
+  const NAMA = 'I Wayan Ardana';                       // G-232 di A1, G-305 di D1
+  const gs = sandbox.bacaGuides_();
+  const kembar = gs.filter(x => x.guideName === NAMA);
+  cek('Skenario uji memakai nama yang benar-benar kembar beda regu',
+    kembar.length === 2 &&
+    kembar.some(x => x.guideId === 'G-232' && x.regu.join() === 'A1') &&
+    kembar.some(x => x.guideId === 'G-305' && x.regu.join() === 'D1'),
+    kembar.map(x => x.guideId + ' ' + x.regu.join(',')).join(' | '));
+
+  kirim('rv-a1', 'G-232', '2035-06-04');
+  kirim('rv-d1', 'G-305', '2035-06-04');
+  kirim('rv-d2', 'G-305', '2035-06-05');
+  kirim('rv-d3', 'G-018', '2035-06-06');               // supaya tab D1 punya kolom 6 Juni
+  kirim('rv-a2', 'G-006', '2035-06-04');               // supaya tab A2 punya kolom 4 Juni
+  sandbox.bangunRekap(BLN);
+
+  // Ketik review di tab regu, persis seperti tim melakukannya
+  const selReview = (kode, tglTeks) => {
+    const t = doc.getSheetByName(`Rekap ${kode} ${BLN}`);
+    const kol = (t.data[1] || []).findIndex(v => String(v ?? '') === 'TGL: ' + tglTeks) + 1;
+    if (kol < 1) throw new Error(`kolom ${tglTeks} tidak ada di tab ${kode}`);
+    return { t, kol: kol + 2 };                        // REVIEW = kolom ke-3 blok tanggal
+  };
+  const ketik = (kode, nama, tglTeks, nilai) => {
+    const { t, kol } = selReview(kode, tglTeks);
+    const brs = t.data.findIndex(b => String((b || [])[0] ?? '') === nama) + 1;
+    if (brs < 1) throw new Error(`${nama} tidak ada di tab ${kode}`);
+    t.getRange(brs, kol).setValue(nilai);
+  };
+  ketik('A1', NAMA, '4-6-2035', 5);                    // milik G-232
+  ketik('D1', NAMA, '6-6-2035', 3);                    // milik G-305, hari tanpa penilaian
+  sandbox.bangunRekap(BLN);
+
+  const peta = sandbox.kumpulkanReviewManual_(BLN, gs);
+  const milik = Object.fromEntries(Object.entries(peta).filter(([k]) => /^G-(232|305)\|/.test(k)));
+  cek('Review dikunci guideId dari regu tempat angkanya diketik',
+    milik['G-232|2035-06-04'] === 5 && milik['G-305|2035-06-06'] === 3 &&
+    Object.keys(milik).length === 2, JSON.stringify(milik));
+
+  const daftar = sandbox.peringkatGuide_(sandbox.rangkumBulan_(BLN), gs, peta);
+  const a = daftar.find(x => x.guideId === 'G-232');
+  const d = daftar.find(x => x.guideId === 'G-305');
+  // Dengan kunci nama, KEDUANYA berangka 8 (5 + 3).
+  cek('Review satu orang tidak bocor ke kembarannya di regu lain',
+    !!a && !!d && a.review === 5 && d.review === 3,
+    `G-232 review=${a && a.review} · G-305 review=${d && d.review} (harus 5 dan 3, bukan 8 dan 8)`);
+  cek('NILAI TOTAL kembaran ikut benar',
+    !!a && !!d && a.total === 1 + 1 + 1 + 5 && d.total === 2 * (1 + 1 + 1) + 3,
+    `G-232 total=${a && a.total} (harus 8) · G-305 total=${d && d.total} (harus 9)`);
+
+  // Baris di tab regu yang pemiliknya tidak bisa dipastikan dilewati; nama
+  // unik dari regu lain (mis. guide pindah regu) tetap dicocokkan.
+  const { t: a2, kol: kolA2 } = selReview('A2', '4-6-2035');
+  const tempel = (nama, nilai) => { const b = []; b[0] = nama; b[kolA2 - 1] = nilai; a2.data.push(b); };
+  tempel(NAMA, 9);                                     // kembar, bukan anggota A2
+  tempel('Gusti Alit Astawa', 4);                      // unik, anggota A1
+  const peta2 = sandbox.kumpulkanReviewManual_(BLN, gs);
+  cek('Nama kembar di tab regu yang bukan regunya tidak ditempelkan ke siapa pun',
+    !Object.entries(peta2).some(([k, v]) => /^G-(232|305)\|/.test(k) && v === 9),
+    JSON.stringify(Object.fromEntries(Object.entries(peta2).filter(([k]) => /^G-(232|305)\|/.test(k)))));
+  cek('Nama unik dari regu lain tetap sampai ke pemiliknya',
+    peta2['G-001|2035-06-04'] === 4, String(peta2['G-001|2035-06-04']));
+
+  let galat = null;
+  try { sandbox.kumpulkanReviewManual_(BLN); } catch (e) { galat = e; }
+  cek('kumpulkanReviewManual_ tanpa daftar guide gagal keras, bukan diam-diam kosong',
+    !!galat, galat ? String(galat.message).slice(0, 60) : 'tidak melempar');
+}
+
 const gagal = hasil.filter(h => !h.ok);
 console.log(`\n${hasil.length - gagal.length}/${hasil.length} pemeriksaan lulus`);
 process.exit(gagal.length ? 1 : 0);
