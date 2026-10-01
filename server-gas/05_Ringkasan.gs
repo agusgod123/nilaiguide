@@ -80,6 +80,30 @@ function rataPengantaran_(s, kolom) {
  * diuntungkan atau dirugikan. Selisihnya harus bisa dilihat, bukan ditebak.
  */
 function rangkumBulan_(bulan) {
+  return rangkumSaring_(function (tgl) { return tgl.slice(0, 7) === bulan; });
+}
+
+
+/**
+ * Rangkum penilaian dalam rentang tanggal, kedua ujung ikut ('yyyy-MM-dd').
+ * Dipakai rekap mingguan: satu minggu Senin–Minggu bisa melintasi dua bulan,
+ * jadi tidak bisa menumpang rangkumBulan_. Bentuk hasilnya sama persis.
+ */
+function rangkumRentang_(awal, akhir) {
+  return rangkumSaring_(function (tgl) { return tgl >= awal && tgl <= akhir; });
+}
+
+
+/**
+ * Inti bersama rangkumBulan_ dan rangkumRentang_ — SATU-SATUNYA tempat aturan
+ * agregasi ditulis. Yang membedakan keduanya hanya tanggal mana yang diambil.
+ * Jangan menyalin isi fungsi ini ke tempat lain: setiap kali aturan penilaian
+ * berubah (seperti pada putaran per pengantaran), salinan yang terlupa akan
+ * diam-diam menghitung dengan aturan lama.
+ *
+ * @param {function(string): boolean} cocok  menerima 'yyyy-MM-dd' zona spreadsheet
+ */
+function rangkumSaring_(cocok) {
   var sh = sheet_(SHEET_EVAL);
   var last = sh.getLastRow();
   var harian = {}, perPos = {}, total = {}, setTanggal = {};
@@ -93,9 +117,9 @@ function rangkumBulan_(bulan) {
     if (String(r[KOL_STATUS - 1] || '').trim().toLowerCase() === STATUS_GANTI) continue;
     var waktu = new Date(r[1]);
     if (isNaN(waktu.getTime())) continue;
-    if (kodeBulan_(waktu) !== bulan) continue;
 
     var tgl = kodeTanggal_(waktu);
+    if (!cocok(tgl)) continue;
     var pos = Number(r[2]) || 0;
     var gid = String(r[3]).trim();
     // normalUniform_ dipakai bersama pintu masuk data, supaya baris lama
