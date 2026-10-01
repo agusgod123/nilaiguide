@@ -113,7 +113,7 @@ dan rekapnya langsung bisa di-PivotTable untuk laporan.
 
 1. Buat spreadsheet baru → **Extensions → Apps Script**
 2. Jalankan `npm run build:gas`, tempel isi `server-gas/Code.gs` hasilnya, simpan
-   (atau `clasp push` untuk mengirim ke-11 berkas apa adanya)
+   (atau `clasp push` untuk mengirim ke-13 berkas apa adanya)
 3. Jalankan fungsi `setup` → tab `Guides`, `Evaluations`, `Petunjuk` dibuat otomatis
    beserta data guide awal
 4. **Deploy → New deployment → Web app** — *Execute as*: **Me**, *Who has access*: **Anyone**
@@ -376,6 +376,11 @@ Apps Script menyusun tab rekap berformat sama dengan berkas *NILAI REWARD*:
   isinya **berapa pos** yang memeriksa guide itu hari itu (1–3). Ditutup dua
   baris rumus: `JUMLAH GUIDE HADIR` dan `TOTAL KEHADIRAN POS`
 - `Rekap per Pos YYYY-MM` — capaian tiap guide dipisah per pos pemeriksaan
+- `Rekap Mingguan 28 Sep-4 Okt 2026` — satu tab per minggu **Senin–Minggu**
+  (boleh melintasi bulan): ringkasan per regu, lalu seluruh guide dengan
+  UNI FORM, ID, REVIEW, ETIKA, ANTAR, PATUH, NILAI TOTAL, RATA, % UNIFORM, % ID,
+  MUTU UNI, HARI HADIR. Untuk memantau, bukan dasar reward. REVIEW-nya dibaca
+  dari tab Rekap regu bulanan — jangan diketik di tab mingguan
 
 Bila satu guide dinilai di beberapa pos pada hari yang sama, **Uniform, ID, dan
 Etika diambil yang paling buruk** — sekali tidak sesuai tetap tercatat 0, dan
@@ -393,9 +398,10 @@ oleh trigger. Jadwalnya:
 
 | Pemicu | Kapan |
 | --- | --- |
-| Trigger `rekapOtomatis` | tiap 5 menit, **hanya** bila ada penilaian baru masuk |
-| Trigger `rekapHarian` | tiap malam 23.00, sebagai jaring pengaman |
+| Trigger `rekapOtomatis` | tiap 5 menit, **hanya** bila ada penilaian baru masuk — ikut menyusun tab minggu berjalan |
+| Trigger `rekapHarian` | tiap malam 23.00, sebagai jaring pengaman — ikut menyusun minggu berjalan **dan** minggu lalu |
 | Menu **Perbarui Rekap Bulan Ini** | saat itu juga |
+| Menu **Perbarui Rekap Minggu Ini / Minggu Lalu / Rekap Minggu Lain…** | saat itu juga, untuk satu minggu |
 
 Rekap sengaja tidak disusun di dalam `doPost`: menyusun empat tab regu memakan
 belasan detik, dan aplikasi di lapangan akan menganggap penilaian gagal bila

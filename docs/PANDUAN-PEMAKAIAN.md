@@ -567,6 +567,48 @@ Tiap tabel memuat empat angka per guide:
 > Peringkat **review** tidak memakai batas 3 hari, karena review diketik manual
 > oleh tim dan tidak tergantung kehadiran.
 
+### 7c-2. Membaca tab Rekap Mingguan
+
+Satu tab per minggu, namanya misalnya **`Rekap Mingguan 28 Sep-4 Okt 2026`**.
+
+- **Satu minggu = Senin s.d. Minggu.** Minggu yang melintasi bulan tetap satu
+  minggu utuh — 28 Sep–4 Okt adalah satu tab, bukan dua.
+- Tab **minggu berjalan** diperbarui sendiri bersama rekap bulanan (paling
+  lambat 5 menit setelah penilaian masuk). Tiap malam pukul 23.00 minggu
+  berjalan **dan minggu lalu** disusun ulang, supaya penilaian dari HP yang baru
+  mendapat sinyal ikut masuk.
+- Minggu lain: menu **Penilaian Guide → Rekap Minggu Lain…**, lalu ketik tanggal
+  mana saja di minggu itu, misalnya `15-9-2026`.
+
+Susunannya:
+
+```
+Baris 4       SELURUH GUIDE · 187/314 dinilai    ← tetap terlihat saat digulir
+Baris 5–10    REGU A1, REGU A2, SUB ASING, REGU D1, REGU D2, SUB DOMESTIK
+Baris 12 dst  seluruh guide, urut regu lalu nama
+```
+
+| Kolom | Artinya |
+| --- | --- |
+| UNI FORM · ID · REVIEW · ETIKA | Jumlah nilai seluruh pengantaran minggu itu — sama seperti blok TOTAL di tab Rekap regu |
+| ANTAR | Berapa pengantaran yang dinilai |
+| PATUH | Berapa di antaranya berpakaian sesuai (+1 atau +2) |
+| NILAI TOTAL | Uni Form + ID + Review + Etika |
+| **RATA** | Nilai total ÷ Antar — **pembanding yang adil antar guide** |
+| % UNIFORM · % ID | Patuh ÷ Antar, dan ID ÷ Antar |
+| MUTU UNI | Rata-rata nilai Uniform, skala −1 s.d. +2 |
+| HARI HADIR | Berapa hari guide itu dinilai minggu ini |
+
+Sel kosong = guide itu tidak dinilai minggu ini, **bukan** nol.
+
+> ⚠️ **Jangan mengetik REVIEW di tab mingguan.** Angkanya dibaca dari tab
+> **Rekap regu bulanan** — ketik atau perbaiki di sana. Tab mingguan ditulis
+> ulang otomatis, jadi ketikan di tab ini akan hilang.
+
+> Rekap mingguan untuk **memantau**, bukan dasar reward — reward tetap memakai
+> rekap bulanan. Karena satu minggu bisa melintasi bulan, angka beberapa minggu
+> dijumlahkan tidak selalu sama persis dengan angka satu bulan.
+
 ### 7d. ⏰ Cap "Diperbarui"
 
 Di **pojok kanan atas** tiap tab rekap ada tulisan seperti:
@@ -612,6 +654,9 @@ Di deretan menu atas (sebelah **Help**) ada menu **Penilaian Guide**:
 | --- | --- |
 | **Perbarui Rekap Bulan Ini** | Susun ulang rekap sekarang juga, tidak perlu menunggu 5 menit |
 | **Perbarui Rekap Bulan Lalu** | Untuk menutup laporan bulan sebelumnya |
+| **Perbarui Rekap Minggu Ini** | Susun ulang tab rekap minggu berjalan sekarang juga (lihat 7c-2) |
+| **Perbarui Rekap Minggu Lalu** | Senin–Minggu sebelumnya — biasanya dibuka tiap Senin |
+| **Rekap Minggu Lain…** | Ketik tanggal mana saja, mis. `15-9-2026`; minggu yang memuat tanggal itu yang disusun |
 | **Nyalakan Pembaruan Otomatis** | Memasang jadwal otomatis. Cukup sekali |
 | **Periksa Kesehatan Data** | **Paling berguna saat ada masalah** — lihat di bawah |
 

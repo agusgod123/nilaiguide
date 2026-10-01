@@ -15,6 +15,13 @@ keduanya sudah **ter-deploy dan berjalan di produksi**:
 > Anda pernah membaca berkas ini sebelum 28 September, bagian §3 sudah tidak
 > berlaku seluruhnya — baca ulang.
 
+**Putaran 1 Oktober 2026** menambah **tab Rekap Mingguan** (Senin–Minggu) dan
+menutup dua bug yang sudah sampai ke produksi: laporan cetak bagian C membaca
+kolom Dasbor yang salah, dan REVIEW manual bocor ke guide bernama kembar di
+regu lain. Ringkasnya di §2; aturannya di §3.7c–§3.7e. Putaran ini hanya
+menyentuh jalur rekap — cukup tempel `Code.gs` lalu **Save**, tanpa *New
+version* (lihat §6).
+
 > Kalau ada yang bertentangan antara berkas ini dan kode, **kode yang benar**.
 > Periksa ulang sebelum mempercayai bagian mana pun di sini.
 
@@ -54,7 +61,19 @@ lama mana pun.
 | Jumlah penilaian di spreadsheet | ±2.300 baris, ±2.200 di bulan berjalan (44 diganti koreksi) |
 | Data guide | **314** · A1 113, A2 116, D1 52, D2 33 — tiap guide hanya satu regu |
 | `APP_VERSION` | `1.3.0` · service worker `besakih-guide-v1.9.0` |
-| Pengujian | **177/177** Apps Script · **167/167** aplikasi |
+| Pengujian | **227/227** Apps Script · **167/167** aplikasi |
+
+### Yang berubah pada putaran 1 Oktober — rekap mingguan
+
+| Hal | Ringkasnya |
+| --- | --- |
+| Tab baru | `Rekap Mingguan 28 Sep-4 Okt 2026` — satu tab per minggu **Senin–Minggu WITA**, boleh lintas bulan (§3.7d) |
+| Berkas baru | `server-gas/12_RekapMingguan.gs` — **13** berkas bernomor sekarang |
+| Rangkuman | Inti `rangkumBulan_` dipindah ke `rangkumSaring_`; `rangkumRentang_(awal, akhir)` memakai inti yang sama. Aturan agregasi tetap di satu tempat |
+| Menu | *Perbarui Rekap Minggu Ini*, *Perbarui Rekap Minggu Lalu*, *Rekap Minggu Lain…* (ketik tanggal) |
+| Otomatis | `rekapOtomatis` menyusun minggu berjalan bila bulannya berubah; `rekapHarian` 23.00 menyusun minggu berjalan **dan** minggu lalu |
+| Bug: Laporan bagian C | Nomor kolom Dasbor tetap (18 kolom) meleset sejak Dasbor 24 kolom — kini dicari lewat kepala tab (§3.7c) |
+| Bug: REVIEW nama kembar | Review dicocokkan lewat **nama**; 14 nama dipakai dua orang beda regu → review satu orang ikut terhitung ke kembarannya. Kini dikunci `guideId` (§3.7e) |
 
 ### Yang berubah pada putaran 28 September — penilaian per pengantaran
 
@@ -144,7 +163,7 @@ karena membuat staff mengira aplikasinya rusak.
 Urutan yang dipakai 13 Agustus 2026 dan terbukti mulus tanpa satu pun kiriman
 gagal:
 
-1. Kirim 11 berkas `server-gas/*.gs` (clasp), atau `npm run build:gas` lalu tempel
+1. Kirim 13 berkas `server-gas/*.gs` (clasp), atau `npm run build:gas` lalu tempel
    `Code.gs` hasilnya. Jalankan `setup`, Deploy → Manage deployments →
    Edit → **New version**. `setup()` juga **mengunci zona waktu spreadsheet ke
    `Asia/Makassar`** dan melaporkannya di nilai kembalian. Kalau pesannya
@@ -420,6 +439,68 @@ Modul ini sebelumnya **tidak diuji sama sekali**. Tesnya dibuat pada putaran 28
 September dan langsung menemukan dua bug yang sudah sampai ke laporan produksi
 (lihat §7).
 
+Bagian C (ringkasan harian + grafik) **menyalin** angka dari tab Dasbor. Kolom
+Dasbor kini **dicari lewat kepalanya** (`lapKolomDasbor_`: kepala kelompok
+ASING/DOMESTIK/GABUNGAN di atas baris "Tanggal", lalu label kolom di dalam
+kelompoknya). Sampai 1 Oktober kolomnya ditunjuk dengan nomor tetap untuk
+susunan 18 kolom, dan sejak Dasbor melebar jadi 24 kolom nomor itu menunjuk
+kolom lain tanpa error — "% Uniform" terbaca dari Patuh Domestik, dan
+seterusnya. Kalau susunan Dasbor berubah lagi, bagian C kini **dilewati dengan
+keterangan**, bukan diisi angka yang salah. Baris TOTAL bagian C menghitung
+persen dari cacah (patuh ÷ antar), sama dengan baris TOTAL Dasbor.
+
+### 3.7d Rekap mingguan
+
+`12_RekapMingguan.gs` menyusun satu tab per minggu, mis.
+`Rekap Mingguan 28 Sep-4 Okt 2026` (sebulan: `Rekap Mingguan 5-11 Okt 2026`).
+
+- **Satu minggu = Senin s.d. Minggu** menurut zona spreadsheet, **boleh lintas
+  bulan**. Batasnya dihitung dari kode tanggal WITA lalu aritmetika UTC murni —
+  penilaian Minggu 23.30 UTC yang sudah Senin di WITA masuk minggu baru.
+- Bahan angkanya **sama dengan Dasbor**: `rangkumRentang_` → `peringkatGuide_`,
+  REVIEW dari `kumpulkanReviewManual_`. Tidak ada aturan baru.
+- **REVIEW dipotong ke tanggal minggu itu.** `kumpulkanReviewManual_` memberi
+  review sebulan penuh, dan `peringkatGuide_` ikut menghitung "hari yang hanya
+  punya review" — tanpa pemotongan, review di luar minggu ikut terjumlah.
+- Tata letak: baris 1–3 judul/keterangan/kepala, **baris 4 SELURUH GUIDE**
+  (dibekukan bersama kepala), baris 5–10 A1, A2, SUB ASING, D1, D2,
+  SUB DOMESTIK, lalu seluruh guide aktif urut regu → nama.
+- Kolom mengikuti blok TOTAL tab regu: `UNI FORM · ID · REVIEW · ETIKA · ANTAR ·
+  PATUH`, lalu `NILAI TOTAL · RATA · % UNIFORM · % ID · MUTU UNI · HARI HADIR`.
+  Turunan (RATA, %, MUTU) **kosong** bila tidak ada pengantaran — bukan 0%.
+- Nilai mati, bukan rumus. REVIEW **tidak boleh diketik di tab ini** — tab
+  ditulis ulang otomatis; tempatnya di tab Rekap regu bulanan.
+- Kisi tab dipangkas ke area terpakai (±325 × 14), karena batas 10 juta sel
+  Google menghitung sel kosong juga (lihat §9).
+- **Untuk memantau, bukan reward.** Karena lintas bulan, jumlah beberapa minggu
+  tidak tepat sama dengan angka bulanan.
+
+| Pemicu | Yang disusun |
+| --- | --- |
+| `rekapOtomatis` (5 menit) | minggu berjalan, **bila** salah satu bulan yang berubah bersinggungan dengannya. Gagalnya hanya dicatat — tidak menandai ulang bulan, tidak menahan rekap bulanan |
+| `rekapHarian` (23.00) | minggu berjalan **dan** minggu lalu (penilaian dari HP yang baru dapat sinyal bisa tiba setelah minggunya berganti) |
+| Menu | minggu ini, minggu lalu, atau minggu yang memuat tanggal ketikan (`15-9-2026`, `15/09/2026`, `2026-09-15`; tanggal mustahil ditolak) |
+
+`bangunRekapMingguan` memakai **kunci skrip yang sama** dengan `bangunRekap`:
+REVIEW dibaca dari tab regu, dan tab itu kosong sesaat ketika sedang disusun
+ulang proses lain.
+
+### 3.7e REVIEW manual dikunci `guideId`
+
+Tab regu hanya memuat **nama**. `kumpulkanReviewManual_(bulan, guides)`
+memetakan baris di tab regu X ke **anggota regu X** yang bernama sama (di dalam
+satu regu nama selalu unik — kembar seregu diberi pembeda dalam kurung). Nama
+yang tidak ada di regunya hanya dicocokkan bila milik **tepat satu** guide;
+selebihnya dilewati dan dicatat di Logger. Hasilnya peta
+`'guideId|yyyy-mm-dd' → angka`, dan `peringkatGuide_` mencarinya lewat
+`guideId`.
+
+Sampai 1 Oktober kuncinya nama. Ada **14 nama** yang dipakai dua orang di regu
+berbeda (mis. I Wayan Ardana G-232 A1 / G-305 D1), jadi setiap review yang
+diketik untuk salah satunya ikut terhitung ke kembarannya — sampai ke NILAI
+TOTAL dan RATA di Dasbor dan Laporan. Tanpa argumen `guides` fungsinya
+**melempar**, supaya review tidak diam-diam menjadi nol.
+
 ### 3.8 Data guide
 
 **314 guide** — A1 113, A2 116, D1 52, D2 33. Kategori `Asing`/`Domestik`, regu
@@ -484,7 +565,8 @@ selesai ditulis ulang.
 | `server-gas/08_Peringkat.gs` | Hitung nilai per guide, urutkan, tulis tabel peringkat | Membuang yang belum cukup pengantaran |
 | `server-gas/09_Dasbor.gs` | Ringkasan harian (rumus) + grafik ketaatan | Jalan sebelum tab regu final |
 | `server-gas/10_Trigger.gs` | Orkestrasi urutan rekap, trigger, menu | Menyusun rekap dari doPost |
-| `server-gas/11_Laporan.gs` | Laporan bulanan cetak A4, dipanggil dari menu | Menghitung ulang logika bisnis sendiri |
+| `server-gas/11_Laporan.gs` | Laporan bulanan cetak A4, dipanggil dari menu | Menghitung ulang logika bisnis sendiri; menunjuk kolom Dasbor dengan nomor tetap |
+| `server-gas/12_RekapMingguan.gs` | Tab Rekap Mingguan Senin–Minggu, menu & tanggal ketikan | Menghitung ulang logika bisnis; menerima REVIEW ketikan |
 | `server/` | Backend REST alternatif tanpa dependensi | Menyimpang dari aturan backend Apps Script |
 
 Kolom `status` di tab `Evaluations`: `aktif` (angka yang berlaku) atau
@@ -493,7 +575,7 @@ saat rekap disusun).
 
 Tab spreadsheet: `Guides`, `Evaluations` (append-only), `Petunjuk`,
 `Rekap A1/A2/D1/D2 YYYY-MM`, `Rekap Kehadiran YYYY-MM`, `Rekap per Pos YYYY-MM`,
-`Dasbor YYYY-MM`.
+`Dasbor YYYY-MM`, `Laporan YYYY-MM` (dari menu), `Rekap Mingguan <rentang>`.
 
 Rekap disusun ulang oleh trigger **tiap 5 menit** (hanya bila ada penilaian
 baru) + **tiap malam 23.00** sebagai jaring pengaman. `doPost` hanya menitipkan
@@ -512,7 +594,7 @@ berikut — dan masing-masing punya tes yang menjaganya.
 
 | Aturan | Kenapa | Dijaga oleh |
 | --- | --- | --- |
-| Tidak ada nama top-level kembar antar berkas | Satu lingkup global: yang kembar saling menimpa **tanpa peringatan**. Dalam satu berkas hal itu terlihat mata; dalam 12 berkas tidak. | `test-gas.mjs`, `app.test.mjs` |
+| Tidak ada nama top-level kembar antar berkas | Satu lingkup global: yang kembar saling menimpa **tanpa peringatan**. Dalam satu berkas hal itu terlihat mata; dalam 13 berkas tidak. | `test-gas.mjs`, `app.test.mjs` |
 | Tidak ada kode top-level yang dijalankan saat berkas dimuat (selain literal) | Kalau ada, urutan evaluasi berkas jadi menentukan — dan urutan itu mudah berubah tanpa sengaja. | `test-gas.mjs` |
 | State yang berubah hanya hidup di `App.state` | Dua modul yang masing-masing memegang salinannya sendiri akan berselisih diam-diam. | `app.test.mjs` |
 | `index.html` dan `sw.js` memuat daftar modul yang sama | Kalau `sw.js` tertinggal satu modul, HP offline menerima aplikasi yang separuh modulnya hilang — dan hanya ketahuan di lapangan. | `app.test.mjs` |
@@ -530,10 +612,10 @@ bukan hasil gabungannya, supaya kesalahan tertangkap di sumber.
 ## 5. Perintah kerja
 
 ```bash
-node server-gas/test-gas.mjs      # uji logika Apps Script tanpa Google (177 pemeriksaan)
+node server-gas/test-gas.mjs      # uji logika Apps Script tanpa Google (227 pemeriksaan)
 node test/app.test.mjs            # uji aplikasi via jsdom (167 pemeriksaan)
 node server/server.js             # backend lokal (tidak lagi wajib untuk tes)
-npm run build:gas                 # gabung 12 berkas .gs -> Code.gs
+npm run build:gas                 # gabung 13 berkas .gs -> Code.gs
 npm run docs:pdf                  # bangun ulang PDF dari Markdown
 ```
 
@@ -574,6 +656,12 @@ harus ikut diganti.
 
 `setup()` memasang trigger sendiri dan menjalankan migrasi kolom, jadi jangan
 dilewat.
+
+**Putaran yang hanya menyentuh jalur rekap** (seperti 1 Oktober — rekap
+mingguan, laporan, REVIEW): tempel `Code.gs`, **Save**, lalu muat ulang
+spreadsheet supaya menunya ikut berubah. Tidak perlu `setup()`, tidak perlu
+*New version*, dan trigger yang sudah ada tetap dipakai — trigger dan menu
+selalu menjalankan kode yang tersimpan. `doPost` di `/exec` tidak berubah.
 
 ### Tiga hal yang mudah menjebak
 
@@ -791,6 +879,27 @@ Aplikasinya tidak terpengaruh — di browser keduanya memang serealm.
     angka-angkanya yang penting. Kalau chart gagal dibuat, rekap tidak boleh
     ikut gagal — cukup dicatat di Logger dan ditulis sebagai keterangan di tab.
 
+### Rekap & laporan
+
+29. **Jangan menunjuk kolom tab lain dengan nomor tetap.** Laporan bagian C
+    menunjuk kolom Dasbor dengan nomor untuk susunan 18 kolom; begitu Dasbor
+    melebar jadi 24 kolom, "% Uniform" terbaca dari Patuh Domestik dan
+    seterusnya — tanpa error, laporan tetap rapi. Cari lewat kepala tab, dan
+    kalau tidak ketemu, **lewati dengan keterangan**.
+30. **Tiruan tab menyimpan rumus dan tanggal sebagai TEKS.** Kode yang membaca
+    nilai terhitung (`instanceof Date`, angka hasil rumus) karena itu tidak
+    pernah benar-benar teruji — bagian C laporan selalu kosong di tes, dan bug
+    #29 lolos. Uji bagian seperti itu dengan menghitung rumusnya lebih dulu
+    (`hitungRumus`) dan memakai Date dari realm sandbox
+    (`vm.runInContext('Date', sandbox)`); Date dari realm Node gagal
+    `instanceof`.
+31. **Peta yang dikunci NAMA bocor antar guide bernama kembar.** Di dalam satu
+    regu nama unik, di seluruh daftar tidak (14 nama dipakai dua orang).
+    Apa pun yang menggabungkan lintas regu harus dikunci `guideId`.
+32. **Review sebulan harus dipotong ke rentangnya** sebelum diberikan ke
+    `peringkatGuide_` untuk rentang yang lebih pendek: fungsi itu menghitung
+    "hari yang hanya punya review" dari seluruh isi peta.
+
 ---
 
 ## 8. Riwayat keputusan penting
@@ -846,7 +955,17 @@ Yang sempat dicoba lalu **dibatalkan**, jangan diulang tanpa pembahasan:
 | 8 | Koreksi dari aplikasi hanya untuk penilaian **hari ini** | Disengaja; hari yang lewat lewat admin di spreadsheet |
 | 9 | `doPost` membaca seluruh kolom A–D + status tiap kiriman | Wajar sampai puluhan ribu baris. Kalau nanti lambat, saring per bulan |
 | 10 | Locale proyek Apps Script tetap berbahasa Inggris | Tidak berpengaruh — nama bulan disusun sendiri lewat `BULAN_ID` |
-| 11 | **Dokumen lain di `docs/` belum mengikuti dua putaran 28 September** | `PRD-APLIKASI.md`, `ALUR-APLIKASI.md`, dan `PANDUAN-PEMAKAIAN.md` masih menjelaskan Uniform Ya/Tidak dan aturan satu-pos-sekali-sehari |
+| 11 | **Dokumen lain di `docs/` belum mengikuti dua putaran 28 September** | `PRD-APLIKASI.md`, `ALUR-APLIKASI.md`, `PANDUAN-PEMAKAIAN.md`, dan bagian rekap di `README.md` masih menjelaskan Uniform Ya/Tidak, "ambil yang paling buruk", dan aturan satu-pos-sekali-sehari. Putaran 1 Oktober hanya menambahkan bagian rekap mingguan ke dalamnya |
+| 12 | **Batas 10 juta sel Google** — dihitung dari ukuran kisi, sel kosong ikut. Tiap tab regu bulanan berkisi ±194 kolom × 1.000 baris walau terisi ±120 baris; tujuh tab sebulan ±0,87 juta sel | Perkiraan kasar: tersentuh sekitar pertengahan 2027, lalu rekap gagal menambah kolom tanggal. Penawar murah: pangkas kisi tab regu & kehadiran ke area terpakai seperti tab mingguan (±8× lebih kecil). **Jangan menghapus tab bulan lama** — REVIEW manual hanya tersimpan di sana |
+| 13 | Tab Rekap Mingguan bertambah satu tiap minggu | Dipangkas ke ±325 × 14 sel, jadi ±240 ribu sel setahun. Boleh dihapus kapan pun — seluruhnya dapat disusun ulang dari Evaluations + tab regu |
+
+### Sudah ditutup 1 Oktober
+
+| Dulu | Sekarang |
+| --- | --- |
+| Tidak ada cara melihat data per minggu | Tab **Rekap Mingguan** Senin–Minggu, dari menu dan otomatis (§3.7d) |
+| Laporan bagian C menunjuk kolom Dasbor dengan nomor tetap 18 kolom — angkanya salah sejak Dasbor 24 kolom | Dicari lewat kepala tab; tak dikenali → dilewati dengan keterangan. Baris TOTAL dihitung dari cacah |
+| REVIEW manual dikunci nama — bocor ke kembaran beda regu, sampai ke NILAI TOTAL & RATA | Dikunci `guideId`, dicocokkan per regu (§3.7e) |
 
 ### Sudah ditutup 28 September
 

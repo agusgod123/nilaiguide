@@ -62,9 +62,9 @@ namanya. Kalau ya, lanjut.
 
 1. Di spreadsheet **baru**: menu **Ekstensi → Apps Script**
 2. Hapus seluruh isi editor (`Ctrl+A`, lalu `Delete`)
-3. Jalankan **`npm run build:gas`** dulu — perintah itu menggabungkan 11 berkas
+3. Jalankan **`npm run build:gas`** dulu — perintah itu menggabungkan 13 berkas
    `server-gas/*.gs` menjadi satu **`server-gas/Code.gs`** yang siap ditempel.
-   (Kalau memakai `clasp`, lewati langkah ini: `clasp push` mengirim ke-11 berkas
+   (Kalau memakai `clasp`, lewati langkah ini: `clasp push` mengirim ke-13 berkas
    apa adanya. Untuk versi baru pakai `clasp deploy -i <deploymentId>` — `clasp
    deploy` polos membuat deployment BARU berikut URL baru.)
    Lalu buka berkas **`server-gas/Code.gs`** hasilnya,
