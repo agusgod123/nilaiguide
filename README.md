@@ -398,7 +398,7 @@ oleh trigger. Jadwalnya:
 
 | Pemicu | Kapan |
 | --- | --- |
-| Trigger `rekapOtomatis` | tiap 5 menit, **hanya** bila ada penilaian baru masuk — ikut menyusun tab minggu berjalan |
+| Trigger `rekapOtomatis` | tiap 5 menit, **hanya** bila ada penilaian baru masuk — ikut menyusun tab minggu berjalan, paling sering **sekali sejam** |
 | Trigger `rekapHarian` | tiap malam 23.00, sebagai jaring pengaman — ikut menyusun minggu berjalan **dan** minggu lalu |
 | Menu **Perbarui Rekap Bulan Ini** | saat itu juga |
 | Menu **Perbarui Rekap Minggu Ini / Minggu Lalu / Rekap Minggu Lain…** | saat itu juga, untuk satu minggu |

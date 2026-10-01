@@ -71,7 +71,7 @@ lama mana pun.
 | Berkas baru | `server-gas/12_RekapMingguan.gs` — **13** berkas bernomor sekarang |
 | Rangkuman | Inti `rangkumBulan_` dipindah ke `rangkumSaring_`; `rangkumRentang_(awal, akhir)` memakai inti yang sama. Aturan agregasi tetap di satu tempat |
 | Menu | *Perbarui Rekap Minggu Ini*, *Perbarui Rekap Minggu Lalu*, *Rekap Minggu Lain…* (ketik tanggal) |
-| Otomatis | `rekapOtomatis` menyusun minggu berjalan bila bulannya berubah; `rekapHarian` 23.00 menyusun minggu berjalan **dan** minggu lalu |
+| Otomatis | `rekapOtomatis` menyusun minggu berjalan bila bulannya berubah, **paling sering sekali sejam** (`JEDA_MINGGUAN_MENIT`); `rekapHarian` 23.00 menyusun minggu berjalan **dan** minggu lalu |
 | Bug: Laporan bagian C | Nomor kolom Dasbor tetap (18 kolom) meleset sejak Dasbor 24 kolom — kini dicari lewat kepala tab (§3.7c) |
 | Bug: REVIEW nama kembar | Review dicocokkan lewat **nama**; 14 nama dipakai dua orang beda regu → review satu orang ikut terhitung ke kembarannya. Kini dikunci `guideId` (§3.7e) |
 
@@ -477,13 +477,18 @@ persen dari cacah (patuh ÷ antar), sama dengan baris TOTAL Dasbor.
 
 | Pemicu | Yang disusun |
 | --- | --- |
-| `rekapOtomatis` (5 menit) | minggu berjalan, **bila** salah satu bulan yang berubah bersinggungan dengannya. Gagalnya hanya dicatat — tidak menandai ulang bulan, tidak menahan rekap bulanan |
+| `rekapOtomatis` (5 menit) | minggu berjalan, **bila** salah satu bulan yang berubah bersinggungan dengannya — paling sering sekali per `JEDA_MINGGUAN_MENIT` (60), kecuali minggunya baru berganti. Waktu terakhir (`PROP_MINGGUAN`) hanya dicatat bila berhasil. Gagalnya hanya dicatat di Logger — tidak menandai ulang bulan, tidak menahan rekap bulanan |
 | `rekapHarian` (23.00) | minggu berjalan **dan** minggu lalu (penilaian dari HP yang baru dapat sinyal bisa tiba setelah minggunya berganti) |
 | Menu | minggu ini, minggu lalu, atau minggu yang memuat tanggal ketikan (`15-9-2026`, `15/09/2026`, `2026-09-15`; tanggal mustahil ditolak) |
 
 `bangunRekapMingguan` memakai **kunci skrip yang sama** dengan `bangunRekap`:
 REVIEW dibaca dari tab regu, dan tab itu kosong sesaat ketika sedang disusun
-ulang proses lain.
+ulang proses lain. Ia menunggu kunci sampai **2 menit**
+(`TUNGGU_KUNCI_MINGGUAN_MS`) — lebih sabar dari rekap bulanan (30 detik) dan
+`doPost` (20 detik). Versi pertama hanya menunggu 30 detik dan ikut disusun
+trigger tiap 5 menit; di hari pertama produksi menu langsung gagal "SIBUK"
+karena trigger memegang kunci untuk rekap bulanan lalu rekap mingguan
+berturut-turut (jebakan #33).
 
 ### 3.7e REVIEW manual dikunci `guideId`
 
@@ -899,6 +904,13 @@ Aplikasinya tidak terpengaruh — di browser keduanya memang serealm.
 32. **Review sebulan harus dipotong ke rentangnya** sebelum diberikan ke
     `peringkatGuide_` untuk rentang yang lebih pendek: fungsi itu menghitung
     "hari yang hanya punya review" dari seluruh isi peta.
+33. **Kunci skrip dipakai bersama** oleh `doPost` (menunggu 20 detik), rekap
+    bulanan (30 detik), dan rekap mingguan (2 menit). Setiap kerja yang
+    ditambahkan ke trigger 5 menit memperpanjang waktu kunci terpegang —
+    penilaian dari HP lebih sering dijawab `busy` (tidak hilang, dicoba ulang
+    aplikasi) dan menu gagal "SIBUK". Kerja tambahan yang tidak mendesak
+    jarangkan (lihat `JEDA_MINGGUAN_MENIT`), jangan ditempel di belakang
+    `bangunRekap` tiap 5 menit.
 
 ---
 

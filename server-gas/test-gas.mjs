@@ -173,6 +173,7 @@ class FakeSpreadsheet {
 const doc = new FakeSpreadsheet();
 let lockDipegang = false;
 let gagalKunci = false;
+let tungguKunci = null;     // batas tunggu waitLock terakhir, untuk memeriksa kesabaran tiap jalur
 const props = new Map();
 let triggers = [];
 
@@ -233,7 +234,7 @@ const sandbox = {
   },
   LockService: {
     getScriptLock: () => ({
-      waitLock() { if (gagalKunci) throw new Error('sibuk'); lockDipegang = true; },
+      waitLock(ms) { tungguKunci = ms; if (gagalKunci) throw new Error('sibuk'); lockDipegang = true; },
       releaseLock() { lockDipegang = false; },
     }),
   },
@@ -1766,15 +1767,43 @@ cek('ujiCepat() bawaan berjalan & membersihkan barisnya',
   cek('rekapOtomatis() memanggil penyusun minggu berjalan sesudah rekap bulanan',
     /bangunRekap\([\s\S]*perbaruiMingguBerjalan_\(/.test(String(sandbox.rekapOtomatis)));
 
+  // Trigger 5 menit menyusun tab mingguan PALING SERING sekali sejam: tiap
+  // penyusunan memegang kunci skrip yang juga ditunggu penilaian dari HP.
+  const geser = (d, menit) => new Date(d.getTime() + menit * 60000);
+  doc.deleteSheet(doc.getSheetByName(NAMA_TAB));
+  cek('Dalam sejam berikutnya trigger tidak menyusun ulang tab mingguan',
+    sandbox.perbaruiMingguBerjalan_(['2035-05'], geser(kini, 30)) === '' && !doc.getSheetByName(NAMA_TAB),
+    doc.getSheetByName(NAMA_TAB) ? 'tab disusun ulang' : 'dilewati');
+  cek('Lewat sejam, trigger menyusunnya lagi',
+    sandbox.perbaruiMingguBerjalan_(['2035-05'], geser(kini, 61)).indexOf(NAMA_TAB) === 0 &&
+    !!doc.getSheetByName(NAMA_TAB));
+  // Minggu baru tidak ikut menunggu jeda: Minggu 23.50 WITA lalu Senin 00.10 WITA.
+  const mingguMalam = new Date('2035-05-06T15:50:00.000Z');
+  sandbox.perbaruiMingguBerjalan_(['2035-05'], mingguMalam);
+  const hasilSenin = sandbox.perbaruiMingguBerjalan_(['2035-05'], geser(mingguMalam, 20));
+  cek('Minggu baru langsung disusun walau belum sejam sejak penyusunan terakhir',
+    hasilSenin.indexOf('Rekap Mingguan 7-13 Mei 2035') === 0, hasilSenin.slice(0, 40) || '(dilewati)');
+
+  // Kunci sibuk: dicoba (bukan dilewati karena jeda), gagal tanpa menjatuhkan
+  // trigger, dan TIDAK dicatat — putaran trigger berikutnya mencoba lagi.
+  const seninPagi = geser(mingguMalam, 140);                        // Senin 02.10 WITA
   gagalKunci = true;
   let lolos = true, hasilSibuk = null;
-  try { hasilSibuk = sandbox.perbaruiMingguBerjalan_(['2035-05'], kini); } catch (e) { lolos = false; }
+  try { hasilSibuk = sandbox.perbaruiMingguBerjalan_(['2035-05'], seninPagi); } catch (e) { lolos = false; }
   let sibuk = null;
   try { sandbox.bangunRekapMingguan('2035-05-02'); } catch (e) { sibuk = e; }
   gagalKunci = false;
   cek('Kunci sibuk: rekap mingguan gagal jelas, tapi tidak menjatuhkan trigger',
     lolos && hasilSibuk === '' && !!sibuk && /SIBUK/.test(sibuk.message),
     sibuk ? sibuk.message : 'tidak melempar');
+  cek('Percobaan yang gagal karena kunci diulang pada putaran trigger berikutnya',
+    sandbox.perbaruiMingguBerjalan_(['2035-05'], geser(seninPagi, 5)).indexOf('Rekap Mingguan 7-13 Mei 2035') === 0);
+  cek('Rekap mingguan menunggu kunci 2 menit, lebih sabar dari rekap bulanan',
+    tungguKunci === 120000, `waitLock(${tungguKunci})`);
+  const pesanSibuk = sandbox.pesanGagalMingguan_(new Error('SIBUK: sedang dipakai proses lain'));
+  cek('Pesan SIBUK untuk petugas menjelaskan penyebab dan bahwa data aman',
+    /proses lain/.test(pesanSibuk) && /Tidak ada data yang hilang/.test(pesanSibuk) && /Coba lagi/.test(pesanSibuk),
+    pesanSibuk.split('\n')[0]);
 
   const harianMg = sandbox.susunMingguanHarian_(kini);
   cek('Rekap harian 23.00 menyusun minggu berjalan DAN minggu lalu',

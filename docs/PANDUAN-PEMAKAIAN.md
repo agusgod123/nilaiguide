@@ -573,10 +573,15 @@ Satu tab per minggu, namanya misalnya **`Rekap Mingguan 28 Sep-4 Okt 2026`**.
 
 - **Satu minggu = Senin s.d. Minggu.** Minggu yang melintasi bulan tetap satu
   minggu utuh — 28 Sep–4 Okt adalah satu tab, bukan dua.
-- Tab **minggu berjalan** diperbarui sendiri bersama rekap bulanan (paling
-  lambat 5 menit setelah penilaian masuk). Tiap malam pukul 23.00 minggu
-  berjalan **dan minggu lalu** disusun ulang, supaya penilaian dari HP yang baru
-  mendapat sinyal ikut masuk.
+- Tab **minggu berjalan** diperbarui sendiri, **paling lambat sejam** setelah
+  penilaian masuk — sengaja tidak tiap 5 menit, supaya penilaian yang sedang
+  masuk dari HP tidak ikut antre. Perlu angka terbaru sekarang juga? Pakai menu
+  **Perbarui Rekap Minggu Ini**. Tiap malam pukul 23.00 minggu berjalan **dan
+  minggu lalu** disusun ulang, supaya penilaian dari HP yang baru mendapat
+  sinyal ikut masuk.
+- Muncul pesan **"spreadsheet sedang dipakai proses lain"**? Rekap otomatis
+  atau penilaian dari HP sedang memakai spreadsheet lebih dari 2 menit. Tidak
+  ada data yang hilang — coba lagi beberapa menit kemudian.
 - Minggu lain: menu **Penilaian Guide → Rekap Minggu Lain…**, lalu ketik tanggal
   mana saja di minggu itu, misalnya `15-9-2026`.
 

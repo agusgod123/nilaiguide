@@ -115,12 +115,22 @@ function rekapOtomatis() {
 
 /**
  * Susun ulang tab minggu berjalan bila salah satu bulan yang baru berubah
- * bersinggungan dengannya (satu minggu bisa melintasi dua bulan).
+ * bersinggungan dengannya (satu minggu bisa melintasi dua bulan) — paling
+ * sering sekali per JEDA_MINGGUAN_MENIT, kecuali minggunya baru berganti.
+ *
+ * Kenapa dijarangkan: penyusunan memegang kunci skrip yang juga ditunggu doPost
+ * (paling lama 20 detik). Ikut tiap 5 menit di belakang rekap bulanan membuat
+ * kunci itu terpegang jauh lebih lama, sehingga penilaian dari HP lebih sering
+ * dijawab "sibuk" dan menu rekap mingguan gagal menunggu giliran. Tab ini hanya
+ * untuk memantau; terlambat paling lama sejam tidak mengubah apa pun.
  *
  * Kegagalannya hanya dicatat, tidak dilempar dan tidak menandai ulang bulan
  * mana pun: rekap bulanan adalah dasar reward dan tidak boleh ikut tertahan
- * atau diulang-ulang karena tab mingguan. Rekap harian 23.00 menyusunnya lagi.
+ * atau diulang-ulang karena tab mingguan. Waktu terakhir hanya dicatat bila
+ * BERHASIL, jadi kegagalan dicoba lagi pada putaran trigger berikutnya.
  *
+ * @param {Array}  bulanBerubah daftar 'YYYY-MM' yang baru dirangkum ulang
+ * @param {Date}   kini
  * @return {string} pesan hasil, atau '' bila tidak ada yang disusun
  */
 function perbaruiMingguBerjalan_(bulanBerubah, kini) {
@@ -129,8 +139,22 @@ function perbaruiMingguBerjalan_(bulanBerubah, kini) {
     return b === m.senin.slice(0, 7) || b === m.minggu.slice(0, 7);
   });
   if (!kena) return '';
-  try { return bangunRekapMingguan(m.senin); }
-  catch (e) { Logger.log('rekap mingguan ' + m.label + ': ' + e); return ''; }
+
+  var props = PropertiesService.getScriptProperties();
+  var terakhir = String(props.getProperty(PROP_MINGGUAN) || '').split('|');
+  if (terakhir[0] === m.senin &&
+      kini.getTime() - Number(terakhir[1]) < JEDA_MINGGUAN_MENIT * 60000) {
+    return '';
+  }
+
+  try {
+    var pesan = bangunRekapMingguan(m.senin);
+    props.setProperty(PROP_MINGGUAN, m.senin + '|' + kini.getTime());
+    return pesan;
+  } catch (e) {
+    Logger.log('rekap mingguan ' + m.label + ': ' + e);
+    return '';
+  }
 }
 
 
@@ -217,7 +241,7 @@ function pasangTriggerHarian() {
 
   var pesan = 'Pembaruan otomatis menyala.\n\n' +
               '• Rekap disusun ulang paling lambat 5 menit setelah penilaian masuk.\n' +
-              '• Tab rekap minggu berjalan ikut diperbarui bersamanya.\n' +
+              '• Tab rekap minggu berjalan ikut diperbarui, paling lambat sejam sekali.\n' +
               '• Ditambah satu penyusunan menyeluruh tiap malam pukul 23.00 ' +
               '(bulan berjalan, minggu berjalan, dan minggu lalu).';
   try { SpreadsheetApp.getUi().alert(pesan); } catch (e) {}

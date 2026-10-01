@@ -354,8 +354,10 @@ function bangunRekapMingguan(tgl) {
 
   var lock = LockService.getScriptLock();
   // Kunci yang sama dengan bangunRekap: REVIEW dibaca dari tab Rekap regu, dan
-  // tab itu kosong sesaat ketika sedang disusun ulang oleh proses lain.
-  try { lock.waitLock(30000); } catch (e) { throw new Error('SIBUK: sedang dipakai proses lain'); }
+  // tab itu kosong sesaat ketika sedang disusun ulang oleh proses lain. Menunggu
+  // lebih lama dari rekap bulanan — lihat TUNGGU_KUNCI_MINGGUAN_MS.
+  try { lock.waitLock(TUNGGU_KUNCI_MINGGUAN_MS); }
+  catch (e) { throw new Error('SIBUK: sedang dipakai proses lain'); }
   try {
     var guides = bacaGuides_();
     var m = hitungMingguan_(seninDari_(kode), guides);
@@ -416,6 +418,24 @@ function tampilkanMingguan_(tgl) {
     if (sh) ss_().setActiveSheet(sh);
     ui.alert(pesan);
   } catch (e) {
-    ui.alert('Rekap mingguan tidak jadi disusun: ' + e.message);
+    ui.alert(pesanGagalMingguan_(e));
   }
+}
+
+
+/**
+ * Pesan untuk petugas bila rekap mingguan gagal. SIBUK bukan kerusakan: kunci
+ * skrip sedang dipegang proses lain terlalu lama, dan tidak ada data yang
+ * tersentuh — jadi pesannya menjelaskan siapa yang biasanya memegangnya dan
+ * apa yang perlu dilakukan, bukan sekadar meneruskan teks galat.
+ */
+function pesanGagalMingguan_(e) {
+  var teks = String(e && e.message ? e.message : e);
+  if (teks.indexOf('SIBUK') === 0) {
+    return 'Rekap mingguan belum disusun: spreadsheet sedang dipakai proses lain lebih dari ' +
+           Math.round(TUNGGU_KUNCI_MINGGUAN_MS / 60000) + ' menit — biasanya rekap otomatis, ' +
+           'atau banyak penilaian yang sedang masuk dari HP.\n\n' +
+           'Tidak ada data yang hilang atau berubah. Coba lagi beberapa menit lagi.';
+  }
+  return 'Rekap mingguan tidak jadi disusun: ' + teks;
 }

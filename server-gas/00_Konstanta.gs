@@ -135,6 +135,25 @@ var BATCH_MAKS    = 200;
 var PROP_TERTUNDA = 'rekapTertunda';
 
 
+// ================= Rekap mingguan =================
+// Kunci skrip dipakai bersama oleh doPost (penilaian dari HP — menunggu paling
+// lama 20 detik, lalu mundur dan mencoba lagi nanti), rekap bulanan, dan rekap
+// mingguan. Tab mingguan hanya untuk memantau, jadi trigger 5 menit
+// menyusunnya PALING SERING sekali per jeda ini — kalau ikut tiap 5 menit,
+// kuncinya terlalu lama terpegang dan penilaian yang masuk lebih sering
+// dijawab "sibuk". Minggu baru tetap langsung disusun tanpa menunggu jeda.
+var JEDA_MINGGUAN_MENIT = 60;
+
+// Kapan trigger terakhir berhasil menyusun tab minggu berjalan:
+// 'yyyy-MM-dd (Senin minggu itu)|epoch ms'.
+var PROP_MINGGUAN = 'rekapMingguanTerakhir';
+
+// Berapa lama rekap mingguan menunggu kunci skrip. Lebih sabar dari rekap
+// bulanan (30 detik): rekap otomatis bisa memegang kunci lebih dari 30 detik,
+// dan menu yang gagal hanya karena antre lebih menyebalkan daripada menunggu.
+var TUNGGU_KUNCI_MINGGUAN_MS = 120000;
+
+
 var REGU_INFO = [
   { kode: 'A1', kategori: 'Asing',    nomor: 1 },
   { kode: 'A2', kategori: 'Asing',    nomor: 2 },
