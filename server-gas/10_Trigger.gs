@@ -107,12 +107,56 @@ function rekapOtomatis() {
     try { bangunRekap(tertunda[i]); }
     catch (e) { Logger.log('rekapOtomatis ' + tertunda[i] + ': ' + e); tandaiRekapTertunda_([tertunda[i]]); }
   }
+  // Tab minggu berjalan disusun SESUDAH tab regu bulanan: REVIEW-nya dibaca
+  // dari sana.
+  perbaruiMingguBerjalan_(tertunda, new Date());
+}
+
+
+/**
+ * Susun ulang tab minggu berjalan bila salah satu bulan yang baru berubah
+ * bersinggungan dengannya (satu minggu bisa melintasi dua bulan).
+ *
+ * Kegagalannya hanya dicatat, tidak dilempar dan tidak menandai ulang bulan
+ * mana pun: rekap bulanan adalah dasar reward dan tidak boleh ikut tertahan
+ * atau diulang-ulang karena tab mingguan. Rekap harian 23.00 menyusunnya lagi.
+ *
+ * @return {string} pesan hasil, atau '' bila tidak ada yang disusun
+ */
+function perbaruiMingguBerjalan_(bulanBerubah, kini) {
+  var m = mingguDari_(kodeTanggal_(kini));
+  var kena = bulanBerubah.some(function (b) {
+    return b === m.senin.slice(0, 7) || b === m.minggu.slice(0, 7);
+  });
+  if (!kena) return '';
+  try { return bangunRekapMingguan(m.senin); }
+  catch (e) { Logger.log('rekap mingguan ' + m.label + ': ' + e); return ''; }
 }
 
 
 /** Dipanggil trigger harian — jaring pengaman kalau trigger 5 menit terlewat. */
 function rekapHarian() {
-  bangunRekap();
+  try {
+    bangunRekap();
+  } finally {
+    susunMingguanHarian_(new Date());
+  }
+}
+
+
+/**
+ * Minggu berjalan, plus minggu lalu sekali lagi: penilaian dari perangkat yang
+ * baru mendapat sinyal bisa tiba setelah minggunya berganti, dan trigger 5
+ * menit hanya menyusun minggu berjalan.
+ */
+function susunMingguanHarian_(kini) {
+  var hariIni = kodeTanggal_(kini);
+  var hasil = [];
+  [hariIni, geserTanggal_(hariIni, -7)].forEach(function (t) {
+    try { hasil.push(bangunRekapMingguan(t)); }
+    catch (e) { Logger.log('rekap mingguan ' + namaTabMingguan_(t) + ': ' + e); }
+  });
+  return hasil;
 }
 
 
@@ -123,6 +167,10 @@ function onOpen() {
     .createMenu('Penilaian Guide')
     .addItem('Perbarui Rekap Bulan Ini', 'menuRekapSekarang')
     .addItem('Perbarui Rekap Bulan Lalu', 'menuRekapBulanLalu')
+    .addSeparator()
+    .addItem('Perbarui Rekap Minggu Ini', 'menuRekapMingguIni')
+    .addItem('Perbarui Rekap Minggu Lalu', 'menuRekapMingguLalu')
+    .addItem('Rekap Minggu Lain…', 'menuRekapMingguPilihan')
     .addSeparator()
     .addItem('Nyalakan Pembaruan Otomatis', 'pasangTriggerHarian')
     .addItem('Periksa Kesehatan Data', 'menuPeriksa')
@@ -169,7 +217,9 @@ function pasangTriggerHarian() {
 
   var pesan = 'Pembaruan otomatis menyala.\n\n' +
               '• Rekap disusun ulang paling lambat 5 menit setelah penilaian masuk.\n' +
-              '• Ditambah satu penyusunan menyeluruh tiap malam pukul 23.00.';
+              '• Tab rekap minggu berjalan ikut diperbarui bersamanya.\n' +
+              '• Ditambah satu penyusunan menyeluruh tiap malam pukul 23.00 ' +
+              '(bulan berjalan, minggu berjalan, dan minggu lalu).';
   try { SpreadsheetApp.getUi().alert(pesan); } catch (e) {}
   Logger.log(pesan);
   return pesan;

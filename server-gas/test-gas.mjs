@@ -89,6 +89,14 @@ class FakeSheet {
       },
       setFontWeight() { return this; }, setFontColor() { return this; },
       setBackground() { return this; }, setHorizontalAlignment() { return this; },
+      // Warna per sel sekaligus (12_RekapMingguan.gs). Ukurannya WAJIB sama
+      // dengan rentangnya — Sheets menolak larik yang meleset, jadi ditiru.
+      setBackgrounds(warna) {
+        if (warna.length !== numRows || warna.some(b => b.length !== numCols)) {
+          throw new Error(`setBackgrounds: ukuran ${warna.length}x${(warna[0] || []).length} ≠ rentang ${numRows}x${numCols}`);
+        }
+        return this;
+      },
       setFontSize() { return this; }, setNote() { return this; },
       setNumberFormat(fmt) {
         for (let i = 0; i < numRows; i++) {
@@ -120,6 +128,9 @@ class FakeSheet {
     for (let i = 0; i < jml; i++) this.data.splice(r, 0, []);
     return this;
   }
+  // Isi tiruan ini jarang (sparse), jadi menambah kolom cukup dicatat — dipakai
+  // 12_RekapMingguan.gs untuk memastikan kisi tab cukup lebar sebelum menulis.
+  insertColumnsAfter(kol, jml) { this.kolomTambahan = (this.kolomTambahan || 0) + jml; return this; }
   getSheetId() { return this.nama.length; }
   getName() { return this.nama; }
   getParent() { return doc; }
@@ -1562,6 +1573,214 @@ cek('ujiCepat() bawaan berjalan & membersihkan barisnya',
     cek('Grafik ketaatan bagian C terpasang sekali', lap.getCharts().length === 1,
       `${lap.getCharts().length} grafik`);
   }
+}
+
+/* ---------------- Rekap mingguan (12_RekapMingguan.gs) ----------------
+   Satu minggu = Senin–Minggu WITA, boleh melintasi bulan. Skenario memakai
+   minggu 30 Apr–6 Mei 2035 (April → Mei) dan sengaja memasang jebakan:
+     - penilaian yang HARI-nya berbeda antara UTC dan WITA di kedua ujung minggu
+     - baris 'diganti' oleh koreksi di dalam minggu
+     - REVIEW manual di luar minggu, pada guide yang sama, di tab bulan yang
+       sama — peringkatGuide_ ikut menghitung "hari yang hanya punya review",
+       jadi tanpa pemotongan rentang angka itu ikut terjumlah
+     - cacah patuh dan jumlah nilai Uniform dibuat BERBEDA (jebakan #3) */
+{
+  /* ---- tanggal kalender ---- */
+  const minggu = [0, 1, 2, 3, 4, 5, 6].map(n => sandbox.geserTanggal_('2035-04-30', n));
+  cek('Senin–Minggu: ketujuh hari minggu itu berujung ke Senin yang sama',
+    minggu.every(t => sandbox.seninDari_(t) === '2035-04-30') &&
+    sandbox.seninDari_('2035-04-29') === '2035-04-23' && sandbox.seninDari_('2035-05-07') === '2035-05-07',
+    minggu.map(t => t.slice(5) + '→' + sandbox.seninDari_(t).slice(5)).join(' '));
+  cek('Label minggu: sebulan, lintas bulan, dan lintas tahun',
+    sandbox.mingguDari_('2026-10-07').label === '5-11 Okt 2026' &&
+    sandbox.mingguDari_('2026-10-01').label === '28 Sep-4 Okt 2026' &&
+    sandbox.mingguDari_('2026-01-01').label === '29 Des 2025-4 Jan 2026',
+    ['2026-10-07', '2026-10-01', '2026-01-01'].map(t => sandbox.mingguDari_(t).label).join(' | '));
+  cek('Tanggal ketikan petugas: hari-bulan-tahun dan ISO diterima',
+    ['15-9-2026', '15/09/2026', '15.9.2026', '2026-09-15', ' 2026-9-15 ']
+      .every(s => sandbox.bacaTanggalKetikan_(s) === '2026-09-15'));
+  cek('Tanggal mustahil ditolak, bukan digeser diam-diam',
+    sandbox.bacaTanggalKetikan_('31-2-2026') === null && sandbox.bacaTanggalKetikan_('29-2-2027') === null &&
+    sandbox.bacaTanggalKetikan_('29-2-2028') === '2028-02-29' && sandbox.bacaTanggalKetikan_('besok') === null);
+
+  /* ---- skenario ---- */
+  const ev = doc.getSheetByName('Evaluations');
+  const P = (obj) => JSON.parse(doPost({ postData: { contents: JSON.stringify(obj) } }).getContent());
+  const kirim = (id, gid, pos, iso, uni, idc, etika) => {
+    const r = P({ evaluationId: id, guideId: gid, guideName: 'x', pos, timestamp: iso,
+                  criteria: { uniform: uni, idCard: !!idc, etika }, catatan: '' });
+    if (r.accepted.length !== 1) throw new Error(`${id} ditolak: ${JSON.stringify(r.rejected)}`);
+  };
+  // G-001 (A1)
+  kirim('mg-1', 'G-001', 1, '2035-04-29T03:00:00.000Z',  2, 1,  5);  // 29 Apr 11.00 WITA (Minggu) — DI LUAR
+  kirim('mg-2', 'G-001', 1, '2035-04-29T17:30:00.000Z',  2, 1,  3);  // 30 Apr 01.30 WITA — masuk, padahal UTC masih Minggu
+  kirim('mg-3', 'G-001', 1, '2035-04-30T06:00:00.000Z', -1, 1,  1);
+  kirim('mg-4', 'G-001', 3, '2035-05-02T03:00:00.000Z',  1, 0,  2);
+  kirim('mg-5', 'G-001', 1, '2035-05-06T03:00:00.000Z',  2, 1,  1);
+  kirim('mg-6', 'G-001', 1, '2035-05-06T16:30:00.000Z', -1, 0, -5);  // 7 Mei 00.30 WITA — DI LUAR, padahal UTC masih Minggu
+  // G-006 & G-007 (A2), G-018 (D1). G-005 (D2) sengaja tidak dinilai.
+  kirim('mg-7', 'G-006', 1, '2035-05-01T03:00:00.000Z', -1, 0, -2);
+  kirim('mg-8', 'G-006', 3, '2035-05-01T03:05:00.000Z', -1, 1,  0);
+  kirim('mg-9', 'G-007', 1, '2035-05-04T03:00:00.000Z',  1, 1,  0);
+  kirim('mg-10', 'G-018', 1, '2035-05-03T03:00:00.000Z', 1, 1,  1);
+  // Baris yang sudah digantikan koreksi tidak boleh ikut terhitung
+  ev.data.push(['mg-x', '2035-05-03T05:00:00.000Z', 1, 'G-018', 'I Gede Suweca', 2, 1, 0, 5, '', '', '', 'diganti']);
+
+  sandbox.bangunRekap('2035-04');
+  sandbox.bangunRekap('2035-05');
+  const ketik = (bulan, kode, nama, tglTeks, nilai) => {
+    const t = doc.getSheetByName(`Rekap ${kode} ${bulan}`);
+    const kol = (t.data[1] || []).findIndex(v => String(v ?? '') === 'TGL: ' + tglTeks) + 1;
+    const brs = t.data.findIndex(b => String((b || [])[0] ?? '') === nama) + 1;
+    if (kol < 1 || brs < 1) throw new Error(`sel review ${kode} ${bulan} ${nama} ${tglTeks} tidak ada`);
+    t.getRange(brs, kol + 2).setValue(nilai);
+  };
+  ketik('2035-04', 'A1', 'Gusti Alit Astawa', '30-4-2035', 2);   // masuk
+  ketik('2035-04', 'A1', 'Gusti Alit Astawa', '29-4-2035', 9);   // di luar minggu
+  ketik('2035-05', 'A1', 'Gusti Alit Astawa', '7-5-2035', 5);    // di luar minggu
+  ketik('2035-05', 'A2', 'I Gede Dauh', '4-5-2035', 6);          // masuk, hari tanpa penilaian
+  ketik('2035-05', 'D1', 'I Gede Suweca', '3-5-2035', 4);        // masuk
+  sandbox.bangunRekap('2035-04');                                 // seperti trigger: bulanan dulu,
+  sandbox.bangunRekap('2035-05');                                 // baru mingguan
+
+  const pesan = sandbox.bangunRekapMingguan('2035-04-30');
+  const NAMA_TAB = 'Rekap Mingguan 30 Apr-6 Mei 2035';
+  const mg = doc.getSheetByName(NAMA_TAB);
+  cek('bangunRekapMingguan() membuat satu tab bernama rentang minggunya', !!mg,
+    mg ? NAMA_TAB : doc.getSheets().map(s => s.nama).filter(n => /Mingguan/.test(n)).join(', ') || 'tidak ada');
+  cek('Kunci dilepas setelah rekap mingguan', lockDipegang === false);
+
+  if (mg) {
+    const isi = (r) => mg.data[r - 1] || [];
+    const angka = (b) => ({ uni: b[2], id: b[3], review: b[4], etika: b[5], antar: b[6], patuh: b[7],
+                            nilai: b[8], rata: b[9], pU: b[10], pId: b[11], mutu: b[12], hari: b[13] });
+    const cari = (awal) => mg.data.find(b => String((b || [])[0] ?? '').indexOf(awal) === 0) || [];
+    const dekat = (a, b) => typeof a === 'number' && Math.abs(a - b) < 1e-9;
+    const teks = (o) => Object.entries(o).map(([k, v]) => `${k}=${typeof v === 'number' ? Math.round(v * 1000) / 1000 : JSON.stringify(v)}`).join(' ');
+
+    cek('Judul menyebut Senin dan Minggu-nya',
+      String(isi(1)[0]).indexOf('REKAP MINGGUAN PENILAIAN GUIDE — Senin 30 Apr s.d. Minggu 6 Mei 2035') === 0,
+      String(isi(1)[0]));
+    cek('Kepala kolom mengikuti urutan blok TOTAL tab Rekap regu',
+      isi(3).slice(0, 9).join('|') === 'NAME|REGU|UNI FORM|ID|REVIEW|ETIKA|ANTAR|PATUH|NILAI TOTAL' &&
+      isi(3).slice(9).join('|') === 'RATA|% UNIFORM|% ID|MUTU UNI|HARI HADIR', isi(3).join(' | '));
+
+    const g1 = angka(cari('Gusti Alit Astawa'));
+    // Kalau batas minggu memakai UTC, G-001 tetap 4 pengantaran (mg-3..mg-6)
+    // tapi Uniform 1, ID 2, Etika -1 — makanya semua besaran diperiksa.
+    cek('Batas minggu memakai WITA di kedua ujungnya, bukan UTC',
+      g1.antar === 4 && g1.uni === 4 && g1.id === 3 && g1.etika === 7, teks(g1));
+    cek('Minggu yang melintasi bulan ikut menghitung kedua bulannya', g1.hari === 3,
+      `hari hadir=${g1.hari} (30 Apr, 2 Mei, 6 Mei)`);
+    cek('Cacah PATUH terpisah dari jumlah nilai Uniform', g1.patuh === 3 && g1.uni === 4,
+      `patuh=${g1.patuh} uniform=${g1.uni}`);
+    cek('REVIEW manual di luar minggu tidak ikut terjumlah', g1.review === 2,
+      `review=${g1.review} (harus 2 — bukan 16 dengan 29 Apr dan 7 Mei)`);
+    cek('NILAI TOTAL & RATA per pengantaran sama dengan aturan rekap bulanan',
+      g1.nilai === 16 && dekat(g1.rata, 4) && dekat(g1.pU, 0.75) && dekat(g1.pId, 0.75) && dekat(g1.mutu, 1),
+      teks(g1));
+
+    const g6 = angka(cari('I Gede Dauh'));
+    cek('Review pada hari tanpa penilaian di dalam minggu tetap dihitung',
+      g6.review === 6 && g6.antar === 2 && g6.hari === 1 && g6.nilai === 3 && dekat(g6.rata, 1.5) &&
+      dekat(g6.pU, 0) && dekat(g6.mutu, -1), teks(g6));
+
+    const g18 = angka(cari('I Gede Suweca'));
+    cek('Baris yang diganti koreksi tidak ikut terhitung',
+      g18.antar === 1 && g18.etika === 1 && g18.review === 4 && g18.nilai === 7, teks(g18));
+
+    const g5 = cari('I Gede Darta');
+    cek('Guide yang tidak dinilai minggu ini berbaris kosong, bukan nol',
+      g5.length > 0 && g5.slice(2, 14).every(v => v === '' || v === undefined),
+      JSON.stringify(g5.slice(0, 14)));
+
+    const semua = angka(isi(4));
+    cek('Baris 4 (dibekukan) memuat SELURUH GUIDE',
+      String(isi(4)[0]).indexOf('SELURUH GUIDE · 4/' + JML_GUIDE + ' dinilai') === 0, String(isi(4)[0]));
+    cek('Jumlah seluruh guide seminggu benar',
+      semua.antar === 8 && semua.patuh === 5 && semua.uni === 4 && semua.id === 6 && semua.etika === 6 &&
+      semua.review === 12 && semua.nilai === 28 && semua.hari === 6, teks(semua));
+    cek('Persen & rata ringkasan memakai penyebut pengantaran',
+      dekat(semua.rata, 3.5) && dekat(semua.pU, 0.625) && dekat(semua.pId, 0.75) && dekat(semua.mutu, 0.5),
+      teks(semua));
+
+    const a2 = angka(cari('REGU A2')), subA = angka(cari('SUB ASING')), subD = angka(cari('SUB DOMESTIK'));
+    const d2 = cari('REGU D2');
+    cek('Ringkasan per regu dan sub kategori',
+      a2.antar === 3 && a2.review === 6 && a2.nilai === 5 &&
+      subA.antar === 7 && subA.nilai === 21 && subD.antar === 1 && subD.nilai === 7 &&
+      subA.antar + subD.antar === semua.antar,
+      `A2 ${teks(a2)} | SUB ASING antar=${subA.antar} nilai=${subA.nilai} | SUB DOMESTIK antar=${subD.antar}`);
+    cek('Regu tanpa pengantaran tidak ditulis 0%',
+      String(d2[0]).indexOf('REGU D2 · 0/') === 0 && d2.slice(2, 14).every(v => v === '' || v === undefined),
+      JSON.stringify(d2.slice(0, 8)));
+
+    // Daftar guide: SELURUH guide aktif, urut regu lalu nama
+    const awalDaftar = mg.data.findIndex(b => String((b || [])[0] ?? '').indexOf('DAFTAR GUIDE') === 0) + 2;
+    const daftar = mg.data.slice(awalDaftar - 1).filter(b => b && b[0]);
+    const urutRegu = ['A1', 'A2', 'D1', 'D2'];
+    const urutOk = daftar.every((b, i) => {
+      if (!i) return true;
+      const p = daftar[i - 1];
+      const ra = urutRegu.indexOf(p[1]), rb = urutRegu.indexOf(b[1]);
+      return ra < rb || (ra === rb && String(p[0]).toLowerCase() <= String(b[0]).toLowerCase());
+    });
+    cek('Daftar memuat seluruh guide aktif, urut regu lalu nama',
+      daftar.length === JML_GUIDE && urutOk && daftar[0][1] === 'A1' && daftar[daftar.length - 1][1] === 'D2',
+      `${daftar.length} guide, ${daftar[0] && daftar[0][0]} … ${daftar[daftar.length - 1] && daftar[daftar.length - 1][0]}`);
+
+    cek('Format angka: RATA & MUTU dua desimal, kolom persen sebagai persen',
+      mg.getNumberFormat(4, 10) === '0.00' && mg.getNumberFormat(4, 11) === '0%' &&
+      mg.getNumberFormat(4, 12) === '0%' && mg.getNumberFormat(4, 13) === '0.00',
+      [10, 11, 12, 13].map(k => mg.getNumberFormat(4, k)).join(' '));
+    cek('Kepala & SELURUH dibekukan, nama guide dibekukan', mg.frozen === 4 && mg.frozenCols === 1,
+      `baris ${mg.frozen}, kolom ${mg.frozenCols}`);
+    cek('Tidak ada sel gabungan (aman untuk kolom beku)', mg.merges.length === 0, `${mg.merges.length}`);
+    const rusak = mg.data.some(b => (b || []).some(v => String(v) === '#ERROR!' ||
+                                                     (typeof v === 'number' && !isFinite(v))));
+    cek('Tidak ada #ERROR! atau NaN di tab mingguan', !rusak);
+    cek('Pesan hasil menyebut cacah pengantaran dan guide',
+      pesan.indexOf('8 pengantaran dari 4/' + JML_GUIDE + ' guide') > -1, pesan);
+
+    // Disusun ulang dari tanggal lain di minggu yang sama, dengan format ketikan
+    const jmlTab = doc.getSheets().length;
+    sandbox.bangunRekapMingguan('3-5-2035');
+    cek('Disusun ulang dari tanggal mana pun di minggu itu: tab sama, tidak bertambah',
+      doc.getSheets().length === jmlTab && doc.getSheetByName(NAMA_TAB).data[3][6] === 8,
+      `${jmlTab} → ${doc.getSheets().length} tab`);
+  }
+
+  let galat = null;
+  try { sandbox.bangunRekapMingguan('31-2-2035'); } catch (e) { galat = e; }
+  cek('Tanggal yang tidak sah ditolak dengan pesan jelas', !!galat && /tidak dikenali/.test(galat.message),
+    galat ? galat.message : 'tidak melempar');
+
+  /* ---- jalur otomatis ---- */
+  const kini = new Date('2035-05-02T04:00:00.000Z');              // Rabu 2 Mei 2035, WITA
+  cek('Trigger 5 menit melewati tab mingguan bila bulannya tidak berubah',
+    sandbox.perbaruiMingguBerjalan_(['2035-07'], kini) === '');
+  doc.deleteSheet(doc.getSheetByName(NAMA_TAB));
+  const hasilTrigger = sandbox.perbaruiMingguBerjalan_(['2035-04'], kini);
+  cek('Trigger 5 menit menyusun minggu berjalan bila salah satu bulannya berubah',
+    !!doc.getSheetByName(NAMA_TAB) && hasilTrigger.indexOf(NAMA_TAB) === 0, hasilTrigger.slice(0, 60));
+  cek('rekapOtomatis() memanggil penyusun minggu berjalan sesudah rekap bulanan',
+    /bangunRekap\([\s\S]*perbaruiMingguBerjalan_\(/.test(String(sandbox.rekapOtomatis)));
+
+  gagalKunci = true;
+  let lolos = true, hasilSibuk = null;
+  try { hasilSibuk = sandbox.perbaruiMingguBerjalan_(['2035-05'], kini); } catch (e) { lolos = false; }
+  let sibuk = null;
+  try { sandbox.bangunRekapMingguan('2035-05-02'); } catch (e) { sibuk = e; }
+  gagalKunci = false;
+  cek('Kunci sibuk: rekap mingguan gagal jelas, tapi tidak menjatuhkan trigger',
+    lolos && hasilSibuk === '' && !!sibuk && /SIBUK/.test(sibuk.message),
+    sibuk ? sibuk.message : 'tidak melempar');
+
+  const harianMg = sandbox.susunMingguanHarian_(kini);
+  cek('Rekap harian 23.00 menyusun minggu berjalan DAN minggu lalu',
+    harianMg.length === 2 && !!doc.getSheetByName(NAMA_TAB) &&
+    !!doc.getSheetByName('Rekap Mingguan 23-29 Apr 2035'),
+    harianMg.map(p => p.split(' selesai')[0]).join(' | '));
 }
 
 const gagal = hasil.filter(h => !h.ok);
