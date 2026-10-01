@@ -133,6 +133,9 @@ class FakeSheet {
     const spec = { tipe: null, rentang: [], opsi: {}, posisi: null, numHeaders: null };
     const b = {
       setChartType(t) { spec.tipe = t; return b; },
+      // 11_Laporan.gs memakai asLineChart(); dulu tidak pernah terpanggil di
+      // sini karena bagian harian laporan selalu kosong di tiruan ini.
+      asLineChart() { spec.tipe = 'LINE'; return b; },
       addRange(r) { spec.rentang.push(r.__rentang); return b; },
       setNumHeaders(n) { spec.numHeaders = n; return b; },
       setPosition(r, c, ox, oy) { spec.posisi = { row: r, col: c }; return b; },
@@ -1479,6 +1482,85 @@ cek('ujiCepat() bawaan berjalan & membersihkan barisnya',
     const adaNaN = shLap.data.some(b => (b || []).some(v => typeof v === 'number' && !isFinite(v)));
     cek('Tidak ada satu pun angka NaN/#NUM! di seluruh laporan', !adaNaN,
       adaNaN ? 'masih ada angka rusak' : 'bersih');
+  }
+}
+
+/* ---------------- Laporan bagian C membaca kolom Dasbor yang BENAR ----------------
+   Bagian C menyalin angka harian dari tab Dasbor. Dulu kolomnya ditunjuk dengan
+   nomor tetap untuk susunan 18 kolom; sejak Dasbor melebar jadi 24 kolom, nomor
+   itu menunjuk kolom lain tanpa satu pun error. Uji laporan sebelumnya tidak
+   menangkapnya karena tiruan tab menyimpan RUMUS dan tanggal berupa TEKS,
+   sehingga bagian C selalu kosong. Di sini rumus Dasbor dihitung jadi angka dan
+   tanggalnya dijadikan Date — persis yang dilihat Apps Script. */
+{
+  const BLN = '2035-08';
+  const P = (obj) => JSON.parse(doPost({ postData: { contents: JSON.stringify(obj) } }).getContent());
+  const kirim = (id, gid, tgl, jam, uni, idc, etika) => P({
+    evaluationId: id, guideId: gid, guideName: 'x', pos: 1,
+    timestamp: `${tgl}T${jam}:00:00.000Z`,
+    criteria: { uniform: uni, idCard: !!idc, etika }, catatan: '',
+  });
+  // 6 Agt: Asing 3 pengantaran (G-001 dua kali, G-006 sekali), Domestik 1 (G-018)
+  // 7 Agt: Asing 1 pengantaran (G-001)
+  // Angkanya dipilih supaya kolom lama dan kolom baru tidak mungkin kebetulan sama.
+  kirim('lc-1', 'G-001', '2035-08-06', '01', 2, 1, 2);
+  kirim('lc-2', 'G-001', '2035-08-06', '04', -1, 1, -1);
+  kirim('lc-3', 'G-006', '2035-08-06', '01', 1, 0, 1);
+  kirim('lc-4', 'G-018', '2035-08-06', '01', -1, 1, 3);
+  kirim('lc-5', 'G-001', '2035-08-07', '01', 1, 0, 0);
+  sandbox.bangunRekap(BLN);
+  const d1 = doc.getSheetByName(`Rekap D1 ${BLN}`);
+  const kolTgl = (d1.data[1] || []).findIndex(v => String(v ?? '') === 'TGL: 6-8-2035') + 1;
+  const brsG18 = d1.data.findIndex(b => String((b || [])[0] ?? '') === 'I Gede Suweca') + 1;
+  d1.getRange(brsG18, kolTgl + 2).setValue(4);          // review 4 untuk G-018, 6 Agt
+  sandbox.bangunRekap(BLN);
+
+  // Tab Dasbor seperti yang dibaca Apps Script: rumus -> angka, tanggal -> Date
+  const DateCtx = vm.runInContext('Date', sandbox);
+  const dsb = doc.getSheetByName('Dasbor ' + BLN);
+  const terhitung = dsb.data.map(b => (b || []).map(v => hitungRumus(doc, dsb, v)));
+  terhitung.forEach((b, i) => {
+    const m = String(b[0] ?? '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) b[0] = new DateCtx(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    dsb.data[i] = b;
+  });
+
+  const K = typeof sandbox.lapKolomDasbor_ === 'function'
+    ? sandbox.lapKolomDasbor_(dsb.getRange(1, 1, dsb.getLastRow(), dsb.getLastColumn()).getValues())
+    : null;
+  cek('Kolom Dasbor dikenali lewat kepalanya', !!K,
+    K ? `Hadir D=${K.hadirD} · Antar A=${K.antarA} · GABUNGAN=${K.gabU}/${K.gabId}` : 'tidak dikenali');
+
+  const harian = sandbox.lapAmbilHarian_(BLN);
+  cek('Bagian C membaca kedua tanggal dari tab Dasbor', harian.length === 2, `${harian.length} tanggal`);
+  const h6 = harian[0] || {}, h7 = harian[1] || {};
+  cek('Hadir Domestik dibaca dari kolom Hadir DOMESTIK, bukan Mutu Uni Asing',
+    h6.hadirA === 2 && h6.hadirD === 1 && h6.hadir === 3,
+    `6 Agt: hadir A=${h6.hadirA} D=${h6.hadirD} (harus 2 dan 1)`);
+  cek('% Uniform & % ID-Card dibaca dari kolom GABUNGAN',
+    Math.abs(h6.gabU - 0.5) < 1e-9 && Math.abs(h6.gabId - 0.75) < 1e-9 &&
+    Math.abs(h7.gabU - 1) < 1e-9 && Math.abs(h7.gabId) < 1e-9,
+    `6 Agt: ${h6.gabU} / ${h6.gabId} (harus 0.5 / 0.75) · 7 Agt: ${h7.gabU} / ${h7.gabId}`);
+  cek('Etika & Review menjumlah kolom Etika/Review Asing dan Domestik',
+    h6.etika === 5 && h6.review === 4, `6 Agt: etika=${h6.etika} (harus 5) review=${h6.review} (harus 4)`);
+  cek('Cacah Antar, Patuh, ID ikut terbaca untuk baris TOTAL',
+    h6.antar === 4 && h6.patuh === 2 && h6.idCard === 3 && h7.antar === 1,
+    `6 Agt: antar=${h6.antar} patuh=${h6.patuh} id=${h6.idCard} · 7 Agt antar=${h7.antar}`);
+
+  let gagalLap = null;
+  try { sandbox.bangunLaporan_(BLN); } catch (e) { gagalLap = e; }
+  cek('Laporan dengan bagian harian berisi tersusun tanpa error', !gagalLap,
+    gagalLap ? String(gagalLap) : 'selesai');
+  if (!gagalLap) {
+    const lap = doc.getSheetByName('Laporan ' + BLN);
+    const total = lap.data.find(b => String((b || [])[0] ?? '') === 'TOTAL');
+    // Ditimbang PENGANTARAN: patuh 3 dari 5, ID 3 dari 5. Rata-rata persen
+    // harian yang ditimbang jumlah guide memberi 62,5% dan 56,25%.
+    cek('Baris TOTAL bagian C menghitung persen dari cacah pengantaran',
+      !!total && Math.abs(total[5] - 0.6) < 1e-9 && Math.abs(total[6] - 0.6) < 1e-9,
+      total ? `% Uniform=${total[5]} % ID=${total[6]} (harus 0.6 dan 0.6)` : 'baris TOTAL tidak ketemu');
+    cek('Grafik ketaatan bagian C terpasang sekali', lap.getCharts().length === 1,
+      `${lap.getCharts().length} grafik`);
   }
 }
 

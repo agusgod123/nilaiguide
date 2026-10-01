@@ -103,19 +103,26 @@ const LAP_WARNA = {
 };
 
 /**
- * Peta kolom tab Dasbor.
+ * Kolom tab Dasbor yang dibaca bagian C — DICARI lewat kepala tabnya, bukan
+ * nomor kolom tetap.
  *
- * Susunan tab Dasbor: Tanggal, Hari, tujuh kolom ASING (Hadir, Uniform, ID,
- * %Uniform, %ID, Etika, Review), tujuh kolom DOMESTIK dengan urutan sama,
- * lalu dua kolom GABUNGAN (%Uniform, %ID) → 18 kolom, A..R.
+ * Dulu di sini ada nomor tetap untuk susunan 18 kolom (7 per kategori). Begitu
+ * Dasbor melebar jadi 10 kolom per kategori pada putaran per pengantaran,
+ * nomor itu meleset tanpa satu pun error: "Hadir Domestik" terbaca dari kolom
+ * Mutu Uni Asing, "% Uniform" dari Patuh Domestik, "% ID-Card" dari % Uniform
+ * Domestik, dan grafiknya ikut salah. Dengan mencari lewat label, perubahan
+ * susunan berikutnya berakhir dengan bagian C DILEWATI beserta keterangannya
+ * — bukan angka yang diam-diam salah.
  *
- * Kalau susunan itu berubah, ubah angka di sini — jangan menebak di kode.
+ * Baris kepala kelompok (ASING / DOMESTIK / GABUNGAN) ada tepat di atas baris
+ * kepala kolom yang diawali "Tanggal". Label kolom dicari di dalam rentang
+ * kelompoknya masing-masing, karena label yang sama muncul di tiap kelompok.
  */
-const LAP_KOL_DASBOR = {
-  tanggal: 1,  hari: 2,
-  hadirA : 3,  etikaA: 8,  reviewA: 9,
-  hadirD : 10, etikaD: 15, reviewD: 16,
-  gabU   : 17, gabId : 18
+const LAP_DASBOR_KELOMPOK = { A: 'ASING', D: 'DOMESTIK', G: 'GABUNGAN' };
+const LAP_DASBOR_LABEL = {
+  A: { hadirA: 'Hadir', antarA: 'Antar', idA: 'ID', patuhA: 'Patuh', etikaA: 'Etika', reviewA: 'Review' },
+  D: { hadirD: 'Hadir', antarD: 'Antar', idD: 'ID', patuhD: 'Patuh', etikaD: 'Etika', reviewD: 'Review' },
+  G: { gabU: '% Uniform', gabId: '% ID' }
 };
 
 /**
@@ -385,42 +392,95 @@ function lapAmbilHarian_(bulan) {
 
   const nBaris = sh.getLastRow();
   const nKolom = sh.getLastColumn();
-  if (nBaris < 3 || nKolom < LAP_KOL_DASBOR.gabId) return [];
+  if (nBaris < 3 || nKolom < 3) return [];
 
   const nilai = sh.getRange(1, 1, nBaris, nKolom).getValues();
+  const K = lapKolomDasbor_(nilai);
+  if (!K) return [];
 
-  // Cari baris kepala: sel kolom A yang berbunyi "Tanggal".
-  let baris0 = -1;
-  for (let i = 0; i < Math.min(nilai.length, 25); i++) {
-    if (String(nilai[i][0]).trim().toLowerCase() === 'tanggal') { baris0 = i + 1; break; }
-  }
-  if (baris0 < 0) return [];
-
-  const K = LAP_KOL_DASBOR;
+  const ambil = function (baris, kol) { return lapNum_(baris[kol - 1]); };
   const hasil = [];
-  for (let i = baris0; i < nilai.length; i++) {
-    const sel = nilai[i][K.tanggal - 1];
+  for (let i = K.barisData; i < nilai.length; i++) {
+    const b = nilai[i];
+    const sel = b[K.tanggal - 1];
     if (sel === '' || sel === null) continue;
     // Baris TOTAL dan baris keterangan di bawahnya bukan data harian.
     if (!(sel instanceof Date)) {
       if (String(sel).trim().toUpperCase().indexOf('TOTAL') === 0) break;
       continue;
     }
-    const hadirA = lapNum_(nilai[i][K.hadirA - 1]);
-    const hadirD = lapNum_(nilai[i][K.hadirD - 1]);
+    const hadirA = ambil(b, K.hadirA);
+    const hadirD = ambil(b, K.hadirD);
     hasil.push({
       tanggal: sel,
-      hari   : String(nilai[i][K.hari - 1] || ''),
+      hari   : String(b[K.hari - 1] || ''),
       hadirA : hadirA,
       hadirD : hadirD,
       hadir  : hadirA + hadirD,
-      gabU   : lapPersen_(nilai[i][K.gabU - 1]),
-      gabId  : lapPersen_(nilai[i][K.gabId - 1]),
-      etika  : lapNum_(nilai[i][K.etikaA - 1]) + lapNum_(nilai[i][K.etikaD - 1]),
-      review : lapNum_(nilai[i][K.reviewA - 1]) + lapNum_(nilai[i][K.reviewD - 1])
+      // Antar, patuh, dan ID dibawa supaya baris TOTAL sebulan bisa dihitung
+      // dari cacahnya — persen harian tidak boleh dirata-rata begitu saja.
+      antar  : ambil(b, K.antarA) + ambil(b, K.antarD),
+      patuh  : ambil(b, K.patuhA) + ambil(b, K.patuhD),
+      idCard : ambil(b, K.idA) + ambil(b, K.idD),
+      gabU   : lapPersen_(b[K.gabU - 1]),
+      gabId  : lapPersen_(b[K.gabId - 1]),
+      etika  : ambil(b, K.etikaA) + ambil(b, K.etikaD),
+      review : ambil(b, K.reviewA) + ambil(b, K.reviewD)
     });
   }
   return hasil;
+}
+
+
+/**
+ * Nomor kolom (1-based) tiap medan di tab Dasbor, dicari lewat kepala tabnya.
+ * Mengembalikan null bila satu saja tidak ketemu — pemanggilnya lalu melewati
+ * bagian C dengan keterangan, alih-alih membaca kolom yang salah.
+ *
+ * @param {Array<Array>} nilai isi tab Dasbor (getValues)
+ * @return {Object|null} { tanggal, hari, hadirA, …, gabId, barisData }
+ *         barisData = indeks 0-based baris data pertama (tepat di bawah kepala)
+ */
+function lapKolomDasbor_(nilai) {
+  let kepala = -1;
+  for (let i = 0; i < Math.min(nilai.length, 25); i++) {
+    if (String(nilai[i][0]).trim().toLowerCase() === 'tanggal') { kepala = i; break; }
+  }
+  if (kepala < 1) return null;
+  const grup = nilai[kepala - 1];
+  const kol  = nilai[kepala];
+
+  // Awal tiap kelompok: sel pertama sel gabungan di baris kepala kelompok.
+  const awal = [];
+  for (const k in LAP_DASBOR_KELOMPOK) {
+    let c0 = -1;
+    for (let c = 0; c < grup.length; c++) {
+      if (String(grup[c]).trim().toUpperCase().indexOf(LAP_DASBOR_KELOMPOK[k]) === 0) { c0 = c; break; }
+    }
+    if (c0 < 0) return null;
+    awal.push({ k: k, c: c0 });
+  }
+  awal.sort(function (x, y) { return x.c - y.c; });
+
+  const peta = { tanggal: 1, barisData: kepala + 1 };
+  const hari = kol.slice(0, awal[0].c).map(function (v) { return String(v).trim(); }).indexOf('Hari');
+  if (hari < 0) return null;
+  peta.hari = hari + 1;
+
+  for (let u = 0; u < awal.length; u++) {
+    const dari = awal[u].c;
+    const sampai = (u + 1 < awal.length) ? awal[u + 1].c : kol.length;
+    const label = LAP_DASBOR_LABEL[awal[u].k];
+    for (const medan in label) {
+      let ketemu = -1;
+      for (let c = dari; c < sampai; c++) {
+        if (String(kol[c]).trim() === label[medan]) { ketemu = c; break; }
+      }
+      if (ketemu < 0) return null;
+      peta[medan] = ketemu + 1;
+    }
+  }
+  return peta;
 }
 
 
@@ -727,16 +787,18 @@ function lapTulisHarian_(sh, r, harian, bulan) {
     { 1: 'dd/MM', 3: '0', 4: '0', 5: '0', 6: '0.0%', 7: '0.0%', 8: '0', 9: '0' });
   sh.getRange(r0, 1, data.length, 1).setHorizontalAlignment('center');
 
-  // Baris total sebulan.
+  // Baris total sebulan. Persennya dihitung ulang dari CACAH (patuh ÷ antar),
+  // sama seperti baris TOTAL tab Dasbor — bukan rata-rata persen harian, dan
+  // bukan ditimbang jumlah guide: penyebut seluruh persen adalah pengantaran.
   const jml = harian.reduce(function (a, h) {
     a.hadirA += h.hadirA; a.hadirD += h.hadirD; a.hadir += h.hadir;
+    a.antar += h.antar; a.patuh += h.patuh; a.idCard += h.idCard;
     a.etika += h.etika; a.review += h.review;
-    a.gabU += h.gabU * h.hadir; a.gabId += h.gabId * h.hadir;
     return a;
-  }, { hadirA: 0, hadirD: 0, hadir: 0, etika: 0, review: 0, gabU: 0, gabId: 0 });
+  }, { hadirA: 0, hadirD: 0, hadir: 0, antar: 0, patuh: 0, idCard: 0, etika: 0, review: 0 });
 
   r = lapIsiTabel_(sh, r, [['TOTAL', '', jml.hadirA, jml.hadirD, jml.hadir,
-                            lapBagi_(jml.gabU, jml.hadir), lapBagi_(jml.gabId, jml.hadir),
+                            lapBagi_(jml.patuh, jml.antar), lapBagi_(jml.idCard, jml.antar),
                             jml.etika, jml.review]],
                    { 3: '0', 4: '0', 5: '0', 6: '0.0%', 7: '0.0%', 8: '0', 9: '0' });
   sh.getRange(r - 1, 1, 1, LAP_KOL).setFontWeight('bold').setBackground('#f4f6f7');
@@ -1101,7 +1163,7 @@ function ujiLaporan() {
   const harian = lapAmbilHarian_(bulan);
   catat.push('Ringkasan harian       : ' + (harian.length
     ? harian.length + ' tanggal terbaca dari "' + lapNamaDasbor_(bulan) + '"'
-    : '⚠️ kosong — tab Dasbor belum ada, atau LAP_KOL_DASBOR perlu disesuaikan'));
+    : '⚠️ kosong — tab Dasbor belum ada, atau kepalanya tidak dikenali lapKolomDasbor_()'));
 
   const teks = catat.join('\n');
   Logger.log(teks);
